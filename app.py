@@ -23,16 +23,18 @@ INK, BLUE, ORANGE, GREEN, GREY = "#16181D", "#1E4FD8", "#C2410C", "#1E7B34", "#8
 
 st.markdown("""<style>
 .block-container{padding-top:1.2rem}
-.kpi{background:#fff;border:1px solid #E3E3DE;border-radius:14px;padding:14px 18px}
-.kpi .l{font-size:13px;color:#565A63}.kpi .v{font-size:28px;font-weight:700}.kpi .s{font-size:12px;color:#565A63}
+.kpi,.step,.verdict,.flag{color:#16181D}
+.kpi{background:#FFFFFF;border:1px solid #D5D6D0;border-radius:14px;padding:14px 18px}
+.kpi .l{font-size:13px;color:#454952;font-weight:600}.kpi .v{font-size:28px;font-weight:700;color:#16181D}.kpi .s{font-size:12px;color:#454952}
 .steps{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
-.step{flex:1 1 140px;border-radius:12px;padding:10px 12px;border:1px solid #E3E3DE;background:#fff}
-.step .n{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#565A63}
-.step .t{font-size:15px;font-weight:700;margin-top:2px}.step .d{font-size:12px;color:#3B3F47;margin-top:2px}
-.ok{border-top:5px solid #1E7B34}.bad{border-top:5px solid #C2410C}.warn{border-top:5px solid #D99A00}.na{border-top:5px solid #B9BCC2}
-.verdict{background:#F3F6FD;border:1px solid #C3D3F7;border-radius:14px;padding:16px 18px}
-.flag{background:#FFF6F1;border:1px solid #F4C9B3;border-radius:12px;padding:12px 14px;margin-bottom:8px}
-.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:#EDEDE8;color:#3B3F47}
+.step{flex:1 1 140px;border-radius:12px;padding:10px 12px;border:1px solid #D5D6D0;background:#FFFFFF}
+.step .n{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#454952}
+.step .t{font-size:15px;font-weight:700;margin-top:2px;color:#16181D}.step .d{font-size:12px;color:#2A2D33;margin-top:2px}
+.ok{border-top:6px solid #1E7B34}.bad{border-top:6px solid #B4380A}.warn{border-top:6px solid #B07A00}.na{border-top:6px solid #8A8F98}
+.verdict{background:#EEF3FD;border:1px solid #A9BEF0;border-radius:14px;padding:16px 18px}
+.verdict p{color:#16181D}
+.flag{background:#FFF3EC;border:1px solid #E9A988;border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:#E4E4DE;color:#2A2D33}
 </style>""", unsafe_allow_html=True)
 
 
