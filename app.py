@@ -111,8 +111,13 @@ st.markdown(f'''<div class="hero">
   <div style="flex:1;min-width:200px;font-size:12px;color:#C9CBD1;text-align:right">NagarLens · Team 11<br>Synthetic organizer data · leads for review, not accusations</div>
 </div>''', unsafe_allow_html=True)
 
-tabs = st.tabs(["① Follow a case", "② Ward overview", "③ AI inbox", "④ Recovery ledger", "⑤ Scorecards",
-                "⑥ Next rupee", "⑦ Ask NagarLens", "Data quality"])
+# Tabs follow the brief's questions; the machinery (AI inbox, data quality) sits under "How it works".
+T = st.tabs(["Where did the money go?", "Follow one case", "What doesn't add up?", "Who is responsible?",
+             "Where should the next rupee go?", "Ask about my complaint", "How it works"])
+with T[6]:
+    H = st.tabs(["AI inbox: complaints in, issues out", "Data quality and match rates"])
+# Index map kept from the original layout: 0 case, 1 overview, 2 AI inbox, 3 ledger, 4 scorecards, 5 next rupee, 6 ask, 7 data quality
+tabs = [T[1], T[0], H[0], T[2], T[3], T[4], T[5], H[1]]
 
 # =============== ① FOLLOW A CASE ===============
 with tabs[0]:
@@ -274,9 +279,9 @@ with tabs[1]:
         daily = W.groupby(W.assigned_at.dt.normalize()).cost_inr.sum()
         fig = go.Figure()
         fig.add_bar(x=rain.index, y=rain.values, name="Rainfall (mm, max of 2 stations)", marker_color="#9DB4EE")
-        fig.add_scatter(x=daily.index, y=daily.values, name=f"Ward {ward} spend (₹)", yaxis="y2", mode="lines", line_color=ORANGE)
+        fig.add_scatter(x=daily.index, y=daily.values / 1e5, name=f"Ward {ward} billed (₹ lakh)", yaxis="y2", mode="lines", line_color=ORANGE)
         fig.update_layout(height=460, title="Rain drives repair spending", margin=dict(l=0, r=0, t=30, b=0),
-                          yaxis=dict(title="mm"), yaxis2=dict(title="₹", overlaying="y", side="right"), legend=dict(orientation="h", y=-0.15))
+                          yaxis=dict(title="mm"), yaxis2=dict(title="₹ lakh billed", overlaying="y", side="right", rangemode="tozero"), legend=dict(orientation="h", y=-0.15))
         st.plotly_chart(fig, width="stretch")
 
 # =============== ③ AI INBOX (automation) ===============
@@ -316,9 +321,10 @@ with tabs[2]:
                                   textfont=dict(color="#FFFFFF", size=14)))
         fun.update_layout(height=300, margin=dict(l=0, r=0, t=30, b=0), title="This batch")
         a.plotly_chart(fun, width="stretch")
-        plan = allocate(road_risk(t, open_issues(t, ward), DEFAULT_WEIGHTS), 1_000_000)
+        _b, _ = default_budget(t, ward, findings)
+        plan = allocate(road_risk(t, open_issues(t, ward), DEFAULT_WEIGHTS), _b, int(wrow.engineering_crews) * PLAN_DAYS)
         with b:
-            st.markdown(f"**Whole ward {ward}: where the open issues end up** (₹10 L plan, ⑥ Next rupee)")
+            st.markdown(f"**Whole ward {ward}: where the open issues end up** (default plan, see \"Where should the next rupee go?\")")
             kpi(st, "Funded in plan", len(plan["selected"]), f"{inr(plan['total_inr'])} estimated")
             kpi(st, "Sent to warranty contractor", len(plan["dlp_routed"]), "₹0 to BMC")
             kpi(st, "Deferred or manual review", len(plan["deferred"]) + len(plan["excluded"]), "over budget / no road match")
