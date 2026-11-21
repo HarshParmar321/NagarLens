@@ -195,7 +195,12 @@ def detect_lang(q: str) -> str:
 
 
 def answer_citizen(question: str, records: dict) -> tuple[str, str]:
-    out, src = _call("citizen", {"q": question, "r": records}, CITIZEN_SYSTEM,
+    question = question[:500]
+    # Cache by complaint + language, not the raw question, so free-text variations cannot grow the cache
+    # without bound or trigger a new model call for the same complaint.
+    cid = (records.get("complaint") or {}).get("complaint_id")
+    cache_payload = {"cid": cid, "lang": detect_lang(question)} if cid else {"q": question, "r": records}
+    out, src = _call("citizen", cache_payload, CITIZEN_SYSTEM,
                      f"Question: {question}\nRecords: {json.dumps(records, default=str, ensure_ascii=False)}", max_tokens=600)
     if out:
         return out, src

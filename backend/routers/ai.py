@@ -7,7 +7,7 @@ import re
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src import ai
 from src.budget import DEFAULT_WEIGHTS, map_open_complaints, open_issues, road_risk
@@ -28,7 +28,7 @@ WO_FIELDS = ["work_order_id", "contractor_name", "repair_method", "cost_inr", "e
 
 
 class AskIn(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=500)
 
 
 def _open_map(t):
