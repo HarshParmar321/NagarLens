@@ -23,7 +23,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NagarLens API", version="0.1.0", lifespan=lifespan,
               description="Follow every rupee from a complaint to a fix that held. Synthetic organizer data.")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+# Local-only app: allow the web app from any localhost port (3000 by default, 3001 if 3000 is busy, ...).
+app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
                    allow_methods=["*"], allow_headers=["*"])
 
 # Order matters: plan and ai declare /wards/{ward}/plan and /wards/{ward}/brief, which must be matched before

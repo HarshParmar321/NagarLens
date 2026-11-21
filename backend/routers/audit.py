@@ -121,6 +121,16 @@ def set_review(finding_id: str, body: ReviewIn, session: Session = Depends(get_s
     return review.model_dump(mode="json")
 
 
+@router.delete("/findings/{finding_id}/review")
+def clear_review(finding_id: str, session: Session = Depends(get_session)):
+    """Undo the officer's decision on a lead (also used to reset the demo before recording)."""
+    review = session.get(LeadReview, finding_id)
+    if review:
+        session.delete(review)
+        session.commit()
+    return {"finding_id": finding_id, "cleared": bool(review)}
+
+
 @router.get("/reviews")
 def reviews(session: Session = Depends(get_session)):
     return [r.model_dump(mode="json") for r in session.exec(select(LeadReview)).all()]

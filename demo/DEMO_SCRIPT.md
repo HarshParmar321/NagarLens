@@ -1,6 +1,6 @@
 # NagarLens demo video: plan and script (Team 11)
 
-**Deliverable:** one screen recording with voiceover, 2:00 (extended cut 3:00 if the submission allows it).
+**Deliverable:** one MP4 with the screen walkthrough and audio narration in sync, 2:00 (extended cut 3:00 if the submission allows it). It is built by one command, `demo/walkthrough.py`, so it can be re-made in three minutes after any merge.
 **Ready for internal review by 14:30, final by 14:45. Recorder and voice: Kshitij.**
 Every number in the voiceover is checked against the app by `demo/check_demo.py`. Run it before recording and after every merge. If it prints FAIL, fix the line or the code; never narrate a number it rejects.
 
@@ -18,7 +18,8 @@ The whole video stays in one ward, **L · Kurla**, so the viewer follows one pla
 | 13:45 | Run `demo/check_demo.py` and `demo/walkthrough.py --fast`; read the script aloud once against a timer | Kshitij |
 | 14:00 | PRs open. Decide which teammate beats are in (table below) | Kshitij |
 | 14:15 | Merge cut-off. Re-run both checks on `main` | lead session |
-| 14:15–14:30 | Record. Two full takes, keep the better one | Kshitij |
+| 13:45–14:15 | Record the seven narration clips in your own voice (see "How the video is made") | Kshitij |
+| 14:15–14:30 | Build the video: `.venv/Scripts/python demo/walkthrough.py`. Watch it once end to end | Kshitij |
 | 14:30–14:45 | Internal review against the checklist at the bottom; one re-take if needed | whole team |
 | 14:45 | Export 1080p MP4, upload, paste the link in the submission form | Kshitij |
 
@@ -68,21 +69,56 @@ Adding a beat means cutting something. In the 2:00 cut, drop beat 4's second sen
 - Only say "Claude wrote this" when the badge on screen reads "Written by Claude". Without the API key the badges read "Template (Claude offline)"; in that case describe what the text is, not who wrote it.
 - Name the fictional contractor only in beat 5, and only with its numbers next to it.
 
-## Before you record
+## How the video is made (narration always in sync)
 
-1. Start both servers from the repo root:
-   `.venv/Scripts/python -m uvicorn backend.main:app --port 8000` and `cd frontend && npm run dev`.
-2. `.venv/Scripts/python demo/check_demo.py` → must end with `ALL CLAIMS MATCH THE APP`. Its last line also tells you whether Claude is live.
-3. `.venv/Scripts/python demo/walkthrough.py --fast` → every beat prints `ok` and `page errors: none`. This proves each click in the shot list works.
-4. Browser: one clean window at 1440×900, 100% zoom, bookmarks bar hidden, notifications off. Ward **L · Kurla** selected. Hide the round Next.js dev badge (bottom left) by recording a production build: `cd frontend && npm run build && npm run start`.
-5. If the audit page already shows a saved decision on AUD-0133 from a rehearsal, that is fine: clicking **Hold for evidence** again re-saves it.
-6. Record with OBS or the Windows Game Bar (Win+Alt+R), mic close, room quiet. Read from this file on a second screen.
+`demo/walkthrough.py` drives Chrome through the seven beats and records the screen. Sync is by construction:
+each beat has one narration clip, the beat stays on screen for exactly the length of its clip (plus a 0.7 s pause),
+the clicks inside a beat happen at fixed points of that clip (for example "Hold for evidence" is pressed as the
+last sentence of beat 3 is spoken), and each clip is placed on the audio track at the second its beat started.
+Longer or shorter narration just makes that beat longer or shorter; picture and voice cannot drift apart.
 
-## Backup take
+**Step 1: checks** (both servers running; API on :8000, web app on :3000)
 
-`.venv/Scripts/python demo/walkthrough.py` drives the browser through the seven beats on the timings above and saves `demo/out/walkthrough.webm` (silent, 1440×900) plus one still per beat. If a live take goes wrong, record the voiceover on its own and lay it over that file. `demo/out/` is ignored by git.
+```
+.venv/Scripts/python demo/check_demo.py            # must end: ALL CLAIMS MATCH THE APP
+.venv/Scripts/python demo/walkthrough.py --fast    # every beat "ok", "page errors: none"
+```
 
-Last resort, if the web app itself is broken: the Streamlit fallback (`.venv/Scripts/python -m streamlit run app.py`) tells the same story in tabs. The figures are the same; the clicks differ.
+**Step 2: narration**. Pick one:
+
+- **Your own voice (recommended for the submission).** Record seven WAV files, one per beat, reading the voiceover
+  column above, and save them as `demo/narration/beat1.wav` … `beat7.wav`. Any recorder works (Windows Voice Recorder,
+  Audacity, a phone). Leave no long silence at the start or end. Beats without a file fall back to the synthetic voice,
+  so you can replace them one at a time.
+- **Offline synthetic voice (default).** Nothing to do. It uses the Windows voice on this laptop: clear, robotic,
+  no network. Good for rehearsal and as a guide track.
+- **Neural Indian-English voice.** `uv pip install --python .venv edge-tts`, then add `--tts edge`. This sends the
+  narration text to Microsoft's online speech service, so use it only if that is acceptable.
+
+**Step 3: build**
+
+```
+.venv/Scripts/python demo/walkthrough.py           # -> demo/out/nagarlens_demo.mp4 (1440×900, H.264 + AAC)
+```
+
+It takes about as long as the video. It prints the second each beat starts and saves one still per beat next to
+the MP4. With the synthetic voice the 2:00 cut comes out at 1:57. `demo/out/` is ignored by git; upload the MP4
+to the submission, do not commit it.
+
+Rules for a clean take:
+
+- Nobody edits `frontend/` while it records. A half-saved file shows up as an error overlay in the video.
+  For the final take, record a production build: `cd frontend && npm run build && npm run start`.
+- Run it after the 14:15 merge cut-off, so the video shows the app that is submitted.
+- It resets the officer decision on AUD-0133 before the take, so the "Hold for evidence" click visibly changes the screen.
+- If you change a voiceover line, change it in both places: the table above and `NARRATION` in `demo/walkthrough.py`.
+- To add a teammate beat or an extended-cut beat, add an entry to `NARRATION` and a block of clicks in `main()`.
+
+**Recording by hand instead** (OBS or Win+Alt+R): one clean browser window at 1440×900, 100% zoom, notifications off,
+ward L selected, read from this file on a second screen. Use this only if the scripted build fails.
+
+Last resort, if the web app itself is broken: the Streamlit fallback (`.venv/Scripts/python -m streamlit run app.py`)
+tells the same story in tabs. The figures are the same; the clicks differ.
 
 ## Review checklist (14:30–14:45)
 
@@ -92,4 +128,5 @@ Last resort, if the web app itself is broken: the Streamlit fallback (`.venv/Scr
 - [ ] "Synthetic" is said once and no blame word is spoken or shown.
 - [ ] No loading spinner, error box, dev badge, or personal tab/notification on screen.
 - [ ] Audio is clear from start to finish; no clipped first word.
+- [ ] Voice and picture match at every beat change (the build prints the beat start times; spot-check three).
 - [ ] The repo link in the submission opens the README with the two start commands.
