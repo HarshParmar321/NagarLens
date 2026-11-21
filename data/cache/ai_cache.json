@@ -1,0 +1,12 @@
+{
+ "ollama:triage:1d80d3b4a9d87317": {
+  "category": "Pothole",
+  "locality": "Kurla",
+  "road_name": "Kurla Andheri Road",
+  "landmark": "Saki Naka",
+  "severity": 3,
+  "is_noise": false,
+  "summary_en": "Large pothole on Kurla Andheri Road near Saki Naka causing bikes to fall."
+ },
+ "ollama:citizen:98db8e2dd68ca79a": ""
+}

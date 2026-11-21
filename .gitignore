@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.idea/workspace.xml
+.idea/shelf/
+.pytest_cache/
