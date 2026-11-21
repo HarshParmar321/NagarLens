@@ -94,8 +94,16 @@ export default function NextRupeePage() {
               className="mt-1 block w-44 rounded-lg border border-[#D5D6D0] bg-white px-3 py-1.5 text-[15px] font-bold text-[#16181D]"
             />
           </label>
+          <div className="flex flex-wrap gap-1.5 pb-0.5" aria-label="Budget presets">
+            {[500000, 1000000, 2000000].map((v) => (
+              <button key={v} type="button" onClick={() => setBudget(v)}
+                className={`min-h-9 rounded-full border px-3 text-[12.5px] font-semibold ${budget === v ? "border-[#1E4FD8] bg-[#E3EBFD] text-[#17306E]" : "border-[#D5D6D0] bg-white"}`}>
+                {inr(v)}
+              </button>
+            ))}
+          </div>
           <div className="pb-1.5 text-[13px] text-[#454952]">
-            = {inr(budget)}
+            = {inr(budget)} · {inr(d.unallocated_inr)} left
             {changed ? (
               <button onClick={() => setOv({ ward })} className="ml-3 font-semibold text-[#1E4FD8] underline">
                 reset to default
@@ -111,7 +119,9 @@ export default function NextRupeePage() {
               <span className="flex justify-between">
                 {label} <span className="text-[#1E4FD8]">{weights[k] ?? 0}</span>
               </span>
-              <input type="range" min={0} max={10} step={1} value={weights[k] ?? 0} onChange={(e) => setWeight(k, Number(e.target.value))} className="w-full accent-[#1E4FD8]" />
+              <input type="range" min={0} max={10} step={1} value={weights[k] ?? 0} onChange={(e) => setWeight(k, Number(e.target.value))}
+                aria-valuetext={`${label}: ${weights[k] ?? 0} of 10`} className="h-6 w-full accent-[#1E4FD8]" />
+              <span className="flex justify-between text-[10.5px] font-normal text-[#6A6F78]"><span>ignore</span><span>most</span></span>
             </label>
           ))}
         </div>
@@ -121,14 +131,21 @@ export default function NextRupeePage() {
         <Kpi label="Planned (estimate)" value={inr(d.total_inr)} sub={`of ${inr(d.budget_inr)} · ${inr(d.unallocated_inr)} left`} tone="#1E7B34" />
         <Kpi label="Issues funded" value={d.selected.length} sub={`${d.deferred.length} deferred`} />
         <Kpi label="Sent to warranty" value={d.dlp_routed.length} sub="₹0 to BMC" tone="#5B4BC4" />
-        <Kpi label="Top 10 differs from complaint count" value={`${d.top10_differ_from_complaint_ranking} of 10`} sub="picked by risk, not by volume" />
+        <Kpi label="Ranked by risk, not volume" value={`${d.top10_differ_from_complaint_ranking} of top 10`} sub="would rank lower by complaint count alone" />
         <Kpi label="Crew capacity" value={`${d.crew_jobs} jobs`} sub={`in ${d.plan_days} days`} />
       </div>
 
-      <Group title="Funded, in priority order" items={d.selected} open note={`${inr(d.total_inr)} estimated`} />
-      <Group title="Deferred" items={d.deferred} note="over budget or over crew capacity after higher-risk items" />
-      <Group title="Sent to the warranty contractor" items={d.dlp_routed} note="road under its Defect Liability Period: repaired at ₹0 to BMC" />
-      <Group title="Excluded issues" items={d.excluded} note="shown with the reason, never dropped" />
+      <Group title="Funded, in priority order" items={d.selected} open note={`${inr(d.total_inr)} estimated`} status="funded" budget={d.budget_inr} />
+      {[["Deferred", d.deferred, "over budget or over crew capacity after higher-risk items", "deferred"],
+        ["Sent to the warranty contractor", d.dlp_routed, "road under its Defect Liability Period: repaired at ₹0 to BMC", "warranty"],
+        ["Excluded issues", d.excluded, "shown with the reason, never dropped", "excluded"]]
+        .filter(([, items]: any) => items.length)
+        .map(([title, items, note, status]: any) => <Group key={title} title={title} items={items} note={note} status={status} />)}
+      {[["Deferred", d.deferred], ["Sent to warranty", d.dlp_routed], ["Excluded", d.excluded]].some(([, i]: any) => !i.length) ? (
+        <p className="text-[13px] text-[#454952]">
+          None: {[["Deferred", d.deferred], ["Sent to warranty", d.dlp_routed], ["Excluded", d.excluded]].filter(([, i]: any) => !i.length).map(([t]: any) => t).join(" · ")}
+        </p>
+      ) : null}
 
       <details className="rounded-2xl border border-[#D5D6D0] bg-white p-5">
         <summary className="cursor-pointer text-[16px] font-bold">
@@ -184,23 +201,31 @@ export default function NextRupeePage() {
   );
 }
 
-function Group({ title, items, note, open }: { title: string; items: any[]; note?: string; open?: boolean }) {
+function Group({ title, items, note, open, status, budget }: { title: string; items: any[]; note?: string; open?: boolean; status?: string; budget?: number }) {
+  let running = 0;
   return (
     <details open={open} className="rounded-2xl border border-[#D5D6D0] bg-white p-5">
       <summary className="cursor-pointer text-[16px] font-bold">
         {title} <span className="font-normal text-[#454952]">· {items.length}{note ? ` · ${note}` : ""}</span>
       </summary>
       <div className="mt-3 space-y-2">
-        {items.map((it, i) => (
-          <IssueCard key={it.issue_id} it={it} rank={i + 1} />
-        ))}
-        {items.length === 0 ? <div className="text-[13px] text-[#454952]">None.</div> : null}
+        {items.map((it, i) => {
+          running += Number(it.est_cost_inr) || 0;
+          return <IssueCard key={it.issue_id} it={it} rank={i + 1} hidePill={it.status === status} running={budget != null ? running : undefined} />;
+        })}
+        {budget != null && items.length ? (
+          <div className="flex items-center gap-2 pt-1 text-[12.5px] font-semibold text-[#9A3208]">
+            <span className="h-0.5 flex-1 border-t-2 border-dashed border-[#C2410C]" />
+            Budget line: {inr(running)} of {inr(budget)} used{running < budget ? ` · ${inr(budget - running)} left` : ""}
+            <span className="h-0.5 flex-1 border-t-2 border-dashed border-[#C2410C]" />
+          </div>
+        ) : null}
       </div>
     </details>
   );
 }
 
-function IssueCard({ it, rank }: { it: any; rank: number }) {
+function IssueCard({ it, rank, hidePill, running }: { it: any; rank: number; hidePill?: boolean; running?: number }) {
   const st = STATUS[it.status] ?? STATUS.excluded;
   const score = Math.max(0, Math.min(100, Number(it.risk_score) || 0));
   const chips = String(it.why ?? "").split("; ").filter(Boolean);
@@ -211,12 +236,13 @@ function IssueCard({ it, rank }: { it: any; rank: number }) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-[14.5px] font-bold">{it.road_name ?? "Road not identified"}</span>
           <span className="text-[13px] text-[#454952]">· {it.category_reported} · {it.locality_text}</span>
-          <Pill color={st.color} bg={st.bg}>{st.label}</Pill>
+          {hidePill ? null : <Pill color={st.color} bg={st.bg}>{st.label}</Pill>}
         </div>
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {chips.map((c) => (
+          {chips.slice(0, 3).map((c) => (
             <span key={c} className="rounded-full border border-[#C9D7F5] bg-[#EEF3FD] px-2 py-0.5 text-[11.5px] text-[#17306E]">{c}</span>
           ))}
+          {chips.length > 3 ? <span title={chips.slice(3).join(" · ")} className="rounded-full px-1.5 py-0.5 text-[11.5px] font-semibold text-[#17306E]">+{chips.length - 3} more</span> : null}
         </div>
         <div className="mt-1.5 text-[12.5px] text-[#454952]">
           {it.method ? (
@@ -235,7 +261,7 @@ function IssueCard({ it, rank }: { it: any; rank: number }) {
           <div className="h-2 rounded bg-[#1E4FD8]" style={{ width: `${score}%` }} />
         </div>
         <div className="mt-2 text-[16px] font-extrabold">{it.est_cost_inr != null ? inrFull(it.est_cost_inr) : "–"}</div>
-        <div className="text-[11px] text-[#454952]">estimate</div>
+        <div className="text-[11px] text-[#454952]">estimate{running != null ? ` · running ${inr(running)}` : ""}</div>
       </div>
     </div>
   );

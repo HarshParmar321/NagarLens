@@ -98,7 +98,7 @@ function CaseView({ d, verdict, verdictLoading }: { d: any; verdict: any; verdic
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
-        <span className="text-[16px] font-extrabold">{w.work_order_id}</span>
+        <span className="text-[20px] font-extrabold">{w.work_order_id}</span>
         <span className="text-[#454952]">{w.road_name} ({w.road_id}) · ward {w.ward_code} · {w.work_type} · {w.repair_method}</span>
         <DataBadge />
         <button onClick={download} className="ml-auto rounded-lg border border-[#D5D6D0] bg-white px-3 py-1.5 font-semibold hover:border-[#16181D]">⬇ Download case file</button>

@@ -18,6 +18,7 @@ export default function AuditPage() {
   const [rule, setRule] = useState<string>("");
   const [picked, setPicked] = useState<string | null>(null);
   const city = useQuery({ queryKey: ["overview"], queryFn: () => api("/overview") });
+  const wardSum = useQuery({ queryKey: ["findings-ward-summary", ward], queryFn: () => api(`/findings${qs({ ward, limit: 1 })}`) });
   const list = useQuery({
     queryKey: ["findings", onlyWard ? ward : "", rule],
     queryFn: () => api(`/findings${qs({ ward: onlyWard ? ward : undefined, rule: rule || undefined, limit: 300 })}`),
@@ -34,8 +35,8 @@ export default function AuditPage() {
         sub="Three deterministic rules. A job caught by two rules counts once. These are leads for review, not findings of wrongdoing."
       />
       <div className="grid gap-3 md:grid-cols-3">
-        {city.data.review.by_rule.map((r: any) => (
-          <Kpi key={r.rule_id} label={r.label} value={inr(r.at_risk_inr)} sub={`${r.jobs} jobs city-wide`} tone={RULE_COLOR[r.rule_id]} />
+        {((onlyWard ? wardSum.data?.review?.by_rule : null) ?? city.data.review.by_rule).map((r: any) => (
+          <Kpi key={r.rule_id} label={r.label} value={inr(r.at_risk_inr)} sub={`${r.jobs} jobs ${onlyWard && wardSum.data ? `in ward ${ward}` : "city-wide"}`} tone={RULE_COLOR[r.rule_id]} />
         ))}
       </div>
 
@@ -46,6 +47,7 @@ export default function AuditPage() {
         {["", ...FLAG_RULES].map((r) => (
           <button key={r} onClick={() => { setRule(r); setPicked(null); }}
             className={`min-h-10 rounded-full border px-3 py-1.5 font-semibold ${rule === r ? "border-[#1E4FD8] bg-[#E3EBFD] text-[#17306E]" : "border-[#D5D6D0] bg-white"}`}>
+            {r ? <span aria-hidden className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full" style={{ background: RULE_COLOR[r] }} /> : null}
             {r ? list.data.rules.find((x: any) => x.rule_id === r)?.label : "All rules"}
           </button>
         ))}
@@ -60,7 +62,7 @@ export default function AuditPage() {
                 <button key={f.finding_id} onClick={() => { setPicked(f.finding_id); if (window.innerWidth < 1024) setTimeout(() => document.getElementById("evidence")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
                   className={`w-full rounded-lg border px-3 py-2 text-left text-[13px] ${current === f.finding_id ? "border-[#1E4FD8] bg-[#F3F6FE]" : "border-[#EDEDE8] bg-white hover:border-[#B9BDC6]"}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold" style={{ color: RULE_COLOR[f.rule_id] }}>{f.rule}</span>
+                    <span className="font-bold" style={{ color: rule ? "#16181D" : RULE_COLOR[f.rule_id] }}>{rule ? f.work_order_id : f.rule}</span>
                     <span className="whitespace-nowrap font-bold">{inr(f.amount_at_risk_inr)}</span>
                   </div>
                   <div className="text-[#454952]">{f.work_order_id} · ward {f.ward_code} · {f.contractor}{f.borderline ? " · borderline" : ""}</div>
@@ -79,9 +81,11 @@ export default function AuditPage() {
 function Evidence({ id }: { id: string }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["finding", id], queryFn: () => api(`/findings/${id}`) });
+  const [note, setNote] = useState("");
+  const [confirmRelease, setConfirmRelease] = useState(false);
   const decide = useMutation({
-    mutationFn: (decision: string) => api(`/findings/${id}/review`, { method: "PUT", body: JSON.stringify({ decision, note: "" }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["finding", id] }),
+    mutationFn: (decision: string) => api(`/findings/${id}/review`, { method: "PUT", body: JSON.stringify({ decision, note }) }),
+    onSuccess: () => { setConfirmRelease(false); qc.invalidateQueries({ queryKey: ["finding", id] }); },
   });
   if (q.error) return <ErrorBox error={q.error} />;
   if (!q.data) return <Loading />;
@@ -106,9 +110,9 @@ function Evidence({ id }: { id: string }) {
       {f.rule_id === "overbilled_vs_rate_card" && e.rate_card ? (
         <div>
           {[["Rate card cost", e.rate_card.expected_cost_inr, "#8A8F98", "1.00×"], ["Upper end of normal", e.rate_card.tolerance_inr, "#B9BDC6", "1.30×"], ["Billed", e.rate_card.billed_inr, "#C2410C", `${e.rate_card.cost_ratio}×`]].map(([label, v, c, note]: any) => (
-            <div key={label} className="my-1.5 grid grid-cols-[150px_1fr_120px] items-center gap-3 text-[13px]">
+            <div key={label} className="my-1.5 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 text-[13px] md:grid-cols-[150px_1fr_120px]">
               <span className="text-[#454952]">{label}</span>
-              <div className="h-5 rounded bg-[#EFEFEA]"><div className="h-5 rounded" style={{ width: `${Math.max(2, (100 * v) / e.rate_card.billed_inr)}%`, background: c }} /></div>
+              <div className="order-3 col-span-2 h-5 rounded bg-[#EFEFEA] md:order-none md:col-span-1"><div className="h-5 rounded" style={{ width: `${Math.max(2, (100 * v) / e.rate_card.billed_inr)}%`, background: c }} /></div>
               <span className="text-right font-bold">{inrFull(v)} <span className="font-normal text-[#454952]">{note}</span></span>
             </div>
           ))}
@@ -144,13 +148,18 @@ function Evidence({ id }: { id: string }) {
         <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#454952]">Officer decision (a human decides; the audit only raises the lead)</div>
         <div className="flex flex-wrap gap-2">
           {q.data.decisions.map((d: string) => (
-            <button key={d} onClick={() => decide.mutate(d)} disabled={decide.isPending}
+            <button key={d} onClick={() => (d === "release_payment" && !confirmRelease ? setConfirmRelease(true) : decide.mutate(d))} disabled={decide.isPending}
               className={`min-h-11 rounded-lg border px-4 py-2 text-[13.5px] font-semibold ${q.data.review?.decision === d ? "border-[#16181D] bg-[#16181D] text-white" : "border-[#D5D6D0] bg-white hover:border-[#16181D]"}`}>
-              {DECISION_LABEL[d] ?? d}
+              {d === "release_payment" && confirmRelease ? "Confirm: release payment" : DECISION_LABEL[d] ?? d}
             </button>
           ))}
           {q.data.review ? <span className="self-center text-[12px] text-[#454952]">saved {when(q.data.review.decided_at)}</span> : null}
         </div>
+        <label className="mt-2 block text-[12px] font-semibold text-[#454952]">
+          Reason (optional, saved with the decision)
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300}
+            className="mt-1 block min-h-10 w-full rounded-lg border border-[#D5D6D0] bg-white px-3 text-[13.5px] font-normal text-[#16181D]" />
+        </label>
       </div>
       <p className="mt-2 text-[11.5px] text-[#454952]">Evidence: {String(f.evidence_ids).split("|").join(" · ")} · billed amounts from work_orders.csv</p>
     </Section>

@@ -34,7 +34,7 @@ export default function AskPage() {
         sub="Ask in Marathi, Hindi, Hinglish or English. The answer comes back in your language, using only the linked records."
       />
 
-      <Section title="Your question" hint="Include your complaint number, e.g. BMC25-001690." right={<DataBadge />}>
+      <Section title="Your question" hint="Include your complaint number · तक्रार क्रमांक लिहा · शिकायत नंबर लिखें · e.g. BMC25-001690" right={<DataBadge />}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -57,14 +57,11 @@ export default function AskPage() {
           {EXAMPLES.map(([lang, text]) => (
             <button
               key={lang}
-              onClick={() => {
-                setQ(text);
-                submit(text);
-              }}
-              className="min-h-11 rounded-full border border-[#D5D6D0] bg-white px-3.5 py-1.5 font-semibold text-[#16181D] hover:border-[#1E4FD8]"
-              title={text}
+              type="button"
+              onClick={() => setQ(text)}
+              className="min-h-11 rounded-full border border-[#D5D6D0] bg-white px-3.5 py-1.5 text-left font-semibold text-[#16181D] hover:border-[#1E4FD8]"
             >
-              {lang}
+              {lang} <span className="font-normal text-[#454952]">· {text}</span>
             </button>
           ))}
         </div>

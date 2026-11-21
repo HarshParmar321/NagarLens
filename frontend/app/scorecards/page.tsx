@@ -48,7 +48,8 @@ export default function ScorecardsPage() {
               <Versus label="Re-opened in 30 days" actual={r.reopen_rate} expected={r.expected_reopen_rate} verdict={r.durability_chip} />
               <Versus label="Bills above 1.4× rate card" actual={r.over_rate_card_share} expected={r.peer_over_rate_card_share} verdict={r.cost_chip} />
             </div>
-            <p className="mt-3 text-[13.5px] leading-relaxed">{r.text}</p>
+            {r.improve ? <p className="mt-3 rounded-lg bg-[#F6F6F3] px-3 py-2 text-[13.5px]"><b>One thing to improve:</b> {r.improve}</p> : null}
+            <details className="mt-2 text-[13.5px] leading-relaxed"><summary className="min-h-9 cursor-pointer py-1 font-semibold text-[#1E4FD8]">Read the full scorecard</summary><p className="mt-1">{r.text}</p></details>
           </div>
         ))}
       </div>
