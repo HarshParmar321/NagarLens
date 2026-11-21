@@ -44,6 +44,28 @@ def load_all() -> dict:
     return t
 
 
+def _rings(geom):
+    if geom["type"] == "Polygon":
+        return [geom["coordinates"][0]]
+    return [p[0] for p in geom["coordinates"]]
+
+
+def ward_of_point(geo: dict, lat: float, lon: float):
+    """Point-in-polygon on the organizer's approximate ward polygons (consistent with their ward_code columns)."""
+    for f in geo["features"]:
+        for ring in _rings(f["geometry"]):
+            inside = False
+            n = len(ring)
+            for i in range(n):
+                x1, y1 = ring[i][0], ring[i][1]
+                x2, y2 = ring[(i + 1) % n][0], ring[(i + 1) % n][1]
+                if (y1 > lat) != (y2 > lat) and lon < (x2 - x1) * (lat - y1) / (y2 - y1 + 1e-12) + x1:
+                    inside = not inside
+            if inside:
+                return f["properties"]["ward_code"]
+    return None
+
+
 def haversine_m(lat1, lon1, lat2, lon2):
     lat1, lon1, lat2, lon2 = map(np.radians, (lat1, lon1, lat2, lon2))
     a = np.sin((lat2 - lat1) / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2

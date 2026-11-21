@@ -15,7 +15,8 @@ import streamlit as st
 
 from src import ai
 from src.audit import RULE_LABEL, recovery_summary, run_audit
-from src.budget import DEFAULT_WEIGHTS, allocate, open_issues, road_risk
+from src.budget import (DEFAULT_WEIGHTS, PLAN_DAYS, allocate, default_budget, excluded_complaints, map_open_complaints,
+                        open_issues, road_risk)
 from src.data import load_all
 
 st.set_page_config(page_title="NagarLens", page_icon="🔎", layout="wide")
@@ -35,6 +36,15 @@ st.markdown("""<style>
 .verdict p{color:#16181D}
 .flag{background:#FFF3EC;border:1px solid #E9A988;border-radius:12px;padding:12px 14px;margin-bottom:8px}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:#E4E4DE;color:#2A2D33}
+.hero{background:#16181D;color:#F6F6F3;border-radius:16px;padding:18px 24px;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center}
+.hero .big{font-size:30px;font-weight:800;line-height:1.1}.hero .lab{font-size:12px;color:#C9CBD1}
+.hero .arrow{font-size:26px;color:#8A8F98}.hero .accent{color:#FF9B6A}.hero .green{color:#7FD99A}
+.pcard{display:flex;gap:12px;background:#FFFFFF;border:1px solid #D5D6D0;border-radius:12px;padding:10px 14px;margin-bottom:8px;color:#16181D}
+.pcard .rank{font-size:22px;font-weight:800;color:#1E4FD8;min-width:26px}.pcard .pt{font-weight:700;font-size:15px}
+.pcard .pm{font-size:12px;color:#454952;margin:2px 0 6px}
+.chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:999px;background:#EEF3FD;color:#17306E;margin:0 4px 4px 0;border:1px solid #C9D7F5}
+.st{font-size:11px;padding:2px 8px;border-radius:999px;margin-left:6px;font-weight:700}
+.st-funded{background:#E5F4E4;color:#1E5B1F}.st-deferred{background:#F9EEDA;color:#7A4B00}.st-warranty{background:#EFEDFF;color:#3A2E8C}.st-excluded{background:#EDEDE8;color:#3B3F47}
 </style>""", unsafe_allow_html=True)
 
 
@@ -52,6 +62,14 @@ gazetteer = list(t["localities"].locality) + [a.strip() for s in t["localities"]
 def kpi(col, label, value, sub=""):
     col.markdown(f'<div class="kpi"><div class="l">{label}</div><div class="v">{value}</div><div class="s">{sub}</div></div>',
                  unsafe_allow_html=True)
+
+
+PLAN_COLS = {"road_name": "Road", "category_reported": "Problem", "risk_score": st.column_config.ProgressColumn("Risk", min_value=0, max_value=100, format="%.0f"),
+             "est_cost_inr": st.column_config.NumberColumn("Est. cost (₹)", format="₹%,d"), "reason": "Why"}
+LEAD_COLS = {"finding_id": "Lead", "rule": "Rule", "work_order_id": "Work order", "ward_code": "Ward", "contractor": "Contractor",
+             "amount_billed_inr": st.column_config.NumberColumn("Billed (₹)", format="₹%,d"),
+             "amount_at_risk_inr": st.column_config.NumberColumn("At risk (₹)", format="₹%,d"),
+             "reason": st.column_config.TextColumn("Why flagged", width="large"), "review_action": "Next step"}
 
 
 def esc(s) -> str:
@@ -72,6 +90,18 @@ wrow = wards.set_index("ward_code").loc[ward]
 W = wo[wo.ward_code == ward]
 st.sidebar.markdown(f"**AI:** {'🟢 ' + ai.engine_name() if ai.available() else '🟡 offline: cached answers + rule fallbacks'}")
 st.sidebar.markdown('<span class="badge">Synthetic (organizer)</span> data · all contractors fictional', unsafe_allow_html=True)
+
+_rs = recovery_summary(findings)
+_fw = findings[findings.ward_code == ward]
+_wr = recovery_summary(_fw)["total_at_risk_inr"] if len(_fw) else 0
+st.markdown(f'''<div class="hero">
+  <div><div class="lab">Billed for 2025 monsoon road repairs</div><div class="big">{inr(wo.cost_inr.sum())}</div></div>
+  <div class="arrow">→</div>
+  <div><div class="lab">Needs a second look (3 rules, de-duplicated)</div><div class="big accent">{inr(_rs["total_at_risk_inr"])}</div></div>
+  <div class="arrow">→</div>
+  <div><div class="lab">Ward {esc(ward)}: recover {inr(_wr)}, then reinvest by risk</div><div class="big green">Next rupee plan</div></div>
+  <div style="flex:1;min-width:200px;font-size:12px;color:#C9CBD1;text-align:right">NagarLens · Team 11<br>Synthetic organizer data · leads for review, not accusations</div>
+</div>''', unsafe_allow_html=True)
 
 tabs = st.tabs(["① Follow a case", "② Ward overview", "③ AI inbox", "④ Recovery ledger", "⑤ Scorecards",
                 "⑥ Next rupee", "⑦ Ask NagarLens", "Data quality"])
@@ -106,7 +136,10 @@ with tabs[0]:
         ("2 · Assigned", r.contractor_name.replace(" (synthetic)", ""), f"{r.assigned_at:%d %b %H:%M} · SLA {r.sla_hours} h", "ok"),
         ("3 · Repaired", "On time" if r.sla_met == "Y" else "Late", f"done {r.completed_at:%d %b} · {r.hours_to_complete:.0f} h", "ok" if r.sla_met == "Y" else "warn"),
         ("4 · Billed", inr(r.cost_inr), f"{r.cost_ratio:.2f}× rate card", "bad" if r.cost_ratio > 1.4 else "ok"),
-        ("5 · Did it hold?", "Held 30 days" if r.reopened_within_30d == "N" else "Failed", f"{len(later)} repeat job(s) within 30 days", "ok" if r.reopened_within_30d == "N" else "bad"),
+        ("5 · Did it hold?", "Held 30 days" if r.reopened_within_30d == "N" else "Re-opened within 30 days",
+         "no failure recorded" if r.reopened_within_30d == "N" else
+         (f"{len(later)} follow-up job(s) logged on this road" if len(later) else "marked re-opened; no follow-up job logged yet"),
+         "ok" if r.reopened_within_30d == "N" else "bad"),
         ("6 · Verdict", f"{len(f_here)} review lead(s)" if len(f_here) else "No flags", ", ".join(RULE_LABEL[x] for x in f_here.rule_id) or "within normal range", "bad" if len(f_here) else "ok"),
     ]
     st.markdown('<div class="steps">' + "".join(
@@ -133,7 +166,7 @@ with tabs[0]:
             st.warning(f"{road.road_name} was resurfaced on {road.last_resurfaced} and is still under its Defect Liability Period.")
     with b:
         st.markdown("**When:** the SLA clock")
-        ev = [dict(stage="Complaint → assigned", start=start, end=r.assigned_at),
+        ev = [dict(stage="Complaint → assigned", start=min(start, r.assigned_at), end=max(start, r.assigned_at)),
               dict(stage="Assigned → work started", start=r.assigned_at, end=r.work_started_at),
               dict(stage="Work started → completed", start=r.work_started_at, end=r.completed_at)]
         tl = px.timeline(pd.DataFrame(ev), x_start="start", x_end="end", y="stage", color_discrete_sequence=[BLUE])
@@ -191,28 +224,29 @@ with tabs[1]:
     kpi(k[2], "Spent on fixes that failed", inr(W[W.reopened_within_30d == 'Y'].cost_inr.sum()), "re-opened within 30 days")
     kpi(k[3], "Repairs on time", f"{(W.sla_met == 'Y').mean():.0%}", f"city {(wo.sla_met == 'Y').mean():.0%}")
     kpi(k[4], "To review / recover", inr(rs_w["total_at_risk_inr"]), "de-duplicated")
-    st.markdown("#### Follow the rupee: contractor → method → outcome")
-    flagged = set(fw.work_order_id)
-    s = W.assign(outcome=np.where(W.work_order_id.isin(flagged), "Needs review",
-                          np.where(W.reopened_within_30d == "Y", "Failed within 30 days", "Held")),
-                 contractor=W.contractor_name.str.replace(" (synthetic)", ""))
-    l1 = s.groupby(["contractor", "work_type"]).cost_inr.sum().reset_index()
-    l2 = s.groupby(["work_type", "outcome"]).cost_inr.sum().reset_index()
-    nodes = [f"Ward {ward} billed"] + sorted(s.contractor.unique()) + sorted(s.work_type.unique()) + ["Held", "Failed within 30 days", "Needs review"]
-    ix = {n: i for i, n in enumerate(nodes)}
-    src_, dst, val = [], [], []
-    for c_, v in s.groupby("contractor").cost_inr.sum().items():
-        src_.append(0); dst.append(ix[c_]); val.append(v)
-    for row in l1.itertuples():
-        src_.append(ix[row.contractor]); dst.append(ix[row.work_type]); val.append(row.cost_inr)
-    for row in l2.itertuples():
-        src_.append(ix[row.work_type]); dst.append(ix[row.outcome]); val.append(row.cost_inr)
-    ncol = [INK] + [BLUE] * s.contractor.nunique() + [GREY] * s.work_type.nunique() + [GREEN, "#D99A00", ORANGE]
-    sk = go.Figure(go.Sankey(node=dict(label=nodes, color=ncol, pad=14), textfont=dict(color=INK, size=13),
-                             link=dict(source=src_, target=dst, value=val, color="rgba(30,79,216,0.16)",
-                                       hovertemplate="₹%{value:,.0f}<extra></extra>")))
-    sk.update_layout(height=460, margin=dict(l=0, r=0, t=10, b=10))
+    st.markdown("#### Follow the rupee: where every billed rupee ended up")
+    # Each job lands in exactly one outcome: its largest review lead, else failed within 30 days, else held.
+    lead = fw.sort_values("amount_at_risk_inr", ascending=False).drop_duplicates("work_order_id").set_index("work_order_id").rule_id
+    outcome = W.work_order_id.map(lead).map(RULE_LABEL).fillna(
+        pd.Series(np.where(W.reopened_within_30d == "Y", "Failed within 30 days", "Held, no flag"), index=W.index))
+    by = W.assign(outcome=outcome).groupby("outcome").cost_inr.sum()
+    OUT_COL = {"Held, no flag": GREEN, "Failed within 30 days": "#D99A00", "Paid during warranty": "#6D5BD0",
+               "Above rate card": ORANGE, "Possible duplicate bill": "#9A3208"}
+    unspent = max(budget - billed, 0)
+    nodes = [f"Ward budget {inr(budget)}", f"Billed {inr(billed)}"] + ([f"Unspent {inr(unspent)}"] if unspent else []) \
+        + [f"{o} {inr(v)}" for o, v in by.items()]
+    src_ = [0] + ([0] if unspent else []) + [1] * len(by)
+    dst = [1] + ([2] if unspent else []) + list(range(2 + bool(unspent), 2 + bool(unspent) + len(by)))
+    val = [min(billed, budget)] + ([unspent] if unspent else []) + list(by.values)
+    ncol = [INK, BLUE] + ([GREY] if unspent else []) + [OUT_COL.get(o, GREY) for o in by.index]
+    lcol = ["rgba(30,79,216,.25)"] + (["rgba(138,143,152,.25)"] if unspent else []) + \
+           [OUT_COL.get(o, GREY) + "55" for o in by.index]
+    sk = go.Figure(go.Sankey(node=dict(label=nodes, color=ncol, pad=18, thickness=22), textfont=dict(color=INK, size=14),
+                             link=dict(source=src_, target=dst, value=val, color=lcol, hovertemplate="₹%{value:,.0f}<extra></extra>")))
+    sk.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=10))
     st.plotly_chart(sk, width="stretch")
+    if billed > budget:
+        st.caption(f"Billed exceeds the ward budget by {inr(billed - budget)}.")
     a, b = st.columns(2)
     with a:
         spend = wo.groupby("ward_code").cost_inr.sum()
@@ -305,10 +339,15 @@ with tabs[3]:
         st.plotly_chart(px.histogram(wo, x="cost_ratio", nbins=60, height=420, color_discrete_sequence=[GREY],
                                      title="Bill ÷ rate card: normal variation vs outliers").add_vline(
             x=1.4, line_dash="dash", line_color=ORANGE, annotation_text="flag above 1.4×"), width="stretch")
-    only = st.toggle(f"Only ward {ward}", value=True)
+    c1, c2 = st.columns([1, 3])
+    only = c1.toggle(f"Only ward {ward}", value=True)
+    rules_pick = c2.segmented_control("Rule", [RULE_LABEL[r] for r in ["dlp_paid_by_bmc", "overbilled_vs_rate_card", "duplicate_bill"]],
+                                      selection_mode="multi", default=[RULE_LABEL[r] for r in ["dlp_paid_by_bmc", "overbilled_vs_rate_card", "duplicate_bill"]])
     f = findings[findings.ward_code == ward] if only else findings
-    st.dataframe(f.sort_values("amount_at_risk_inr", ascending=False)[["finding_id", "rule_id", "work_order_id", "ward_code", "contractor",
-                 "amount_billed_inr", "amount_at_risk_inr", "reason", "fair_context", "review_action"]], width="stretch", hide_index=True, height=300)
+    f = f[f.rule_id.map(RULE_LABEL).isin(rules_pick or [])]
+    st.dataframe(f.assign(rule=f.rule_id.map(RULE_LABEL), contractor=f.contractor.str.replace(" (synthetic)", ""))
+                 .sort_values("amount_at_risk_inr", ascending=False)[list(LEAD_COLS)],
+                 column_config=LEAD_COLS, width="stretch", hide_index=True, height=320)
     c1, c2 = st.columns(2)
     c1.download_button("⬇ Export leads (CSV)", f.to_csv(index=False), "leads.csv")
     if c2.button("✍ Write ward officer brief"):
@@ -358,52 +397,72 @@ with tabs[4]:
 # =============== ⑥ NEXT RUPEE ===============
 with tabs[5]:
     st.markdown(f"### Where should ward {ward}'s next rupee go?")
-    rec = findings[(findings.ward_code == ward) & (findings.rule_id == "dlp_paid_by_bmc")].amount_at_risk_inr.sum()
-    st.success(f"**Recover first:** {inr(rec)} of this ward's 2025 repairs were billed on roads still under warranty.")
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        budget_in = st.number_input("Budget to allocate (₹)", value=1_000_000, step=100_000, min_value=0)
-        with st.expander("Risk weights", expanded=True):
-            wts = {k: st.slider(k.capitalize(), 0, 10, v) for k, v in DEFAULT_WEIGHTS.items()}
+    def_budget, budget_why = default_budget(t, ward, findings)
+    crews = int(wrow.engineering_crews) * PLAN_DAYS
+    c1, c2, c3 = st.columns([1, 1, 2])
+    budget_in = c1.number_input("Budget to allocate (₹)", value=int(def_budget), step=100_000, min_value=0, key=f"bud_{ward}")
+    c1.caption(f"Default: {budget_why}.")
+    kpi(c2, "Crew capacity", f"{crews} jobs", f"{wrow.engineering_crews} crews × {PLAN_DAYS} days")
+    with c3.popover("⚖ Adjust risk weights", width="stretch"):
+        wcols = st.columns(2)
+        wts = {k: wcols[i % 2].slider(k.capitalize(), 0, 10, v, key=f"w_{k}") for i, (k, v) in enumerate(DEFAULT_WEIGHTS.items())}
+    c3.caption("Weights: " + " · ".join(f"{k} {v}" for k, v in wts.items()))
     risk = road_risk(t, open_issues(t, ward), wts)
+    exc_c = excluded_complaints(t, ward)
     if risk.empty:
-        c2.info("No open complaints in this ward.")
+        st.info("No open road-repair issues in this ward.")
     else:
-        plan = allocate(risk, budget_in)
+        plan = allocate(risk, budget_in, crews)
+        backlog = risk[risk.under_dlp != "Y"].est_cost_inr.sum()
         status = {**{s["issue_id"]: "Funded" for s in plan["selected"]}, **{s["issue_id"]: "Deferred" for s in plan["deferred"]},
                   **{s["issue_id"]: "Warranty: ₹0 to BMC" for s in plan["dlp_routed"]}, **{s["issue_id"]: "Excluded" for s in plan["excluded"]}}
         risk["status"] = risk.issue_id.map(status)
-        with c2:
-            k = st.columns(4)
-            kpi(k[0], "Planned (estimate)", inr(plan["total_inr"]), f"of {inr(budget_in)}")
-            kpi(k[1], "Issues funded", len(plan["selected"]), f"{len(plan['deferred'])} deferred")
-            kpi(k[2], "Sent to warranty", len(plan["dlp_routed"]), "₹0 to BMC")
-            kpi(k[3], "Vs. complaint-count ranking", f"{plan['baseline_overlap']}/{len(plan['selected'])}", "same picks; rest are risk-driven")
-            cmap = {"Funded": GREEN, "Deferred": "#D99A00", "Warranty: ₹0 to BMC": "#6D5BD0", "Excluded": GREY}
-            top = risk.head(15).assign(label=lambda d: d.road_name + " · " + d.category_reported + " · " + d.locality_text)
-            st.plotly_chart(px.bar(top[::-1], x="risk_score", y="label", color="status", orientation="h", height=470,
-                                   color_discrete_map=cmap, hover_data=["why", "method", "est_cost_inr"],
-                                   labels={"risk_score": "Risk score (0–100)", "label": ""},
-                                   title="Top 15 issues by risk score").update_xaxes(range=[0, 100]), width="stretch")
+        rank_cmp = risk[risk.est_cost_inr.notna()].reset_index(drop=True)
+        top_risk = set(rank_cmp.head(10).issue_id)
+        top_count = set(rank_cmp.sort_values(["complaints", "upvotes"], ascending=False).head(10).issue_id)
+        if backlog <= budget_in:
+            st.success(f"**Recover, then reinvest:** fixing every open road issue in this ward is estimated at **{inr(backlog)}**, "
+                       f"within the {inr(budget_in)} available. The ranking below is the order crews should work in.")
+        else:
+            st.warning(f"Open backlog is estimated at {inr(backlog)}, more than the {inr(budget_in)} available: "
+                       f"the lowest-risk items are deferred.")
+        k = st.columns(4)
+        kpi(k[0], "Planned (estimate)", inr(plan["total_inr"]), f"of {inr(budget_in)} available")
+        kpi(k[1], "Issues funded", len(plan["selected"]), f"{len(plan['deferred'])} deferred")
+        kpi(k[2], "Sent to warranty contractor", len(plan["dlp_routed"]), "₹0 to BMC")
+        kpi(k[3], "Risk vs complaint-count ranking", f"{len(top_risk - top_count)} of top 10 differ",
+            "issues a complaint count alone would rank lower")
+        cmap = {"Funded": GREEN, "Deferred": "#D99A00", "Warranty: ₹0 to BMC": "#6D5BD0", "Excluded": GREY}
         a, b = st.columns([3, 2])
         with a:
+            st.markdown("**Priority list**")
+            cards = []
+            for i, row in enumerate(risk.head(8).itertuples(), 1):
+                chips = "".join(f'<span class="chip">{esc(x.strip())}</span>' for x in row.why.split(";"))
+                cost = "₹0 (warranty)" if row.status.startswith("Warranty") else (inr(row.est_cost_inr) if pd.notna(row.est_cost_inr) else "no cost history")
+                cards.append(f'<div class="pcard"><div class="rank">{i}</div><div style="flex:1">'
+                             f'<div class="pt">{esc(row.road_name)} · {esc(row.category_reported)} '
+                             f'<span class="st st-{esc(row.status.split(":")[0].lower())}">{esc(row.status)}</span></div>'
+                             f'<div class="pm">{esc(row.locality_text)} · risk {row.risk_score:.0f}/100 · {esc(row.method or "")} · {cost} · {esc(row.match_class)}</div>'
+                             f'<div>{chips}</div></div></div>')
+            st.markdown("".join(cards), unsafe_allow_html=True)
+        with b:
             pts = risk.dropna(subset=["lat", "lon"])
             mp = px.scatter_map(pts, lat="lat", lon="lon", color="status", size="risk_score", hover_name="road_name",
-                                hover_data=["category_reported", "why"], color_discrete_map=cmap, zoom=13, height=420,
-                                center={"lat": float(pts.lat.mean()), "lon": float(pts.lon.mean())}, size_max=22,
-                                map_style="carto-positron")
-            mp.update_layout(margin=dict(l=0, r=0, t=0, b=0), legend=dict(orientation="h", y=0))
+                                hover_data={"category_reported": True, "why": True, "lat": False, "lon": False},
+                                color_discrete_map=cmap, zoom=13, height=520, size_max=22, map_style="carto-positron",
+                                center={"lat": float(pts.lat.mean()), "lon": float(pts.lon.mean())})
+            mp.update_layout(margin=dict(l=0, r=0, t=0, b=0), legend=dict(orientation="h", y=0, title=None))
             st.plotly_chart(mp, width="stretch")
-        with b:
-            st.markdown("**Funded, in priority order**")
-            st.dataframe(pd.DataFrame(plan["selected"])[["road_name", "category_reported", "method", "est_cost_inr", "why"]]
-                         if plan["selected"] else pd.DataFrame(), width="stretch", hide_index=True, height=360)
-        with st.expander("Deferred, warranty-routed and excluded items, with reasons"):
-            for name in ["deferred", "dlp_routed", "excluded"]:
+        with st.expander(f"Deferred, warranty-routed and excluded: {len(plan['deferred']) + len(plan['dlp_routed']) + len(exc_c)} items, with reasons"):
+            for name in ["deferred", "dlp_routed"]:
                 if plan[name]:
-                    st.markdown(f"**{name.replace('_', ' ').title()}**")
+                    st.markdown(f"**{'Deferred' if name == 'deferred' else 'Sent to warranty contractor'}**")
                     st.dataframe(pd.DataFrame(plan[name])[["road_name", "category_reported", "risk_score", "est_cost_inr", "reason"]],
-                                 width="stretch", hide_index=True)
+                                 width="stretch", hide_index=True, column_config=PLAN_COLS)
+            if len(exc_c):
+                st.markdown("**Complaints not turned into a funded issue**")
+                st.dataframe(exc_c[["complaint_id", "category", "locality", "description", "reason"]], width="stretch", hide_index=True)
         st.caption("Assumptions: " + " · ".join(plan["assumptions"]) + ". A recommendation for the ward officer, not a funding approval.")
         st.download_button("⬇ Export plan (CSV)", pd.DataFrame(plan["selected"]).to_csv(index=False), "next_rupee_plan.csv")
 
@@ -431,24 +490,57 @@ with tabs[6]:
             if len(w_):
                 x = w_.iloc[0]
                 k = st.columns(4)
-                kpi(k[0], "Complaint", c.complaint_id, f"{c.received_at:%d %b %Y}")
+                kpi(k[0], "Complaint", c.complaint_id, f"{c.received_at:%d %b %Y} · {c.status}")
                 kpi(k[1], "Work order", x.work_order_id, x.repair_method)
                 kpi(k[2], "Billed", inr(x.cost_inr), f"rate card {inr(x.expected_cost_inr)}")
                 kpi(k[3], "Outcome", "Re-opened" if x.reopened_within_30d == "Y" else "Held", "on time" if x.sla_met == "Y" else "late")
+                if c.status == "Closed - Duplicate":
+                    st.info(f"Your complaint was merged with {x.n_linked_complaints - 1} other complaint(s) about the same problem into work order {x.work_order_id}.")
+            elif c.status in ("Open", "In Progress"):
+                if "_open_map" not in t:
+                    t["_open_map"] = map_open_complaints(t)
+                placed, exc_all = t["_open_map"]
+                p = placed[placed.complaint_id == c.complaint_id]
+                if len(p):
+                    pw = p.iloc[0]
+                    rk = road_risk(t, open_issues(t, pw.ward_code), DEFAULT_WEIGHTS).reset_index(drop=True)
+                    hit = rk[(rk.road_id == pw.road_id) & (rk.category_reported == pw.category)]
+                    pos = int(hit.index[0]) + 1 if len(hit) else None
+                    k = st.columns(3)
+                    kpi(k[0], "Status", c.status, f"logged {c.received_at:%d %b %Y}")
+                    kpi(k[1], "Matched to", hit.road_name.iloc[0] if len(hit) else pw.road_id, pw.match_note)
+                    kpi(k[2], f"Priority in ward {pw.ward_code}", f"#{pos} of {len(rk)}" if pos else "–",
+                        hit.why.iloc[0] if len(hit) else "")
+                else:
+                    e = exc_all[exc_all.complaint_id == c.complaint_id]
+                    st.warning("Not yet in a repair plan: " + (e.reason.iloc[0] if len(e) else "not matched to a road") + ".")
+            else:
+                st.info({"Forwarded to MMRDA/PWD": "This road is maintained by MMRDA/PWD, not BMC, so BMC forwarded your complaint to them.",
+                         "Forwarded to SWM dept": "This was a solid-waste issue, so it went to BMC's SWM department, not the roads department.",
+                         "Rejected - Not BMC road": "BMC rejected this complaint because the road is not a BMC road.",
+                         "Rejected - Not road issue": "BMC rejected this complaint as not a road issue."}.get(c.status, f"Status: {c.status}"))
 
 # =============== DATA QUALITY ===============
 with tabs[7]:
     ids = wo.linked_complaint_ids.dropna().str.split("|").explode()
-    iss = open_issues(t, ward)
+    if "_open_map" not in t:
+        t["_open_map"] = map_open_complaints(t)
+    placed, exc_all = t["_open_map"]
+    n_open = len(placed) + len(exc_all)
     dq = pd.DataFrame([
         ["Complaint → work order", "exact", ids.isin(comp.complaint_id).sum() / len(comp)],
         ["Work order → complaint", "exact", (wo.n_linked_complaints > 0).mean()],
         ["Work order → road / rate card", "exact", wo.road_name.notna().mean()],
-        [f"Open issue → road (ward {ward})", "candidate", (iss.match_class == "candidate").mean() if len(iss) else 0],
+        ["Open complaint → road segment by GPS", "gps (validated 96%)", (placed.match_class == "gps").sum() / n_open],
+        ["Open complaint → road named in text", "candidate", (placed.match_class == "road named").sum() / n_open],
+        ["Open complaint → excluded, with reason", "unlinked", len(exc_all) / n_open],
         ["Complaints with GPS", "data", comp.lat.notna().mean()],
         ["Complaints with ward", "data", comp.ward_code.notna().mean()]], columns=["link", "match_class", "coverage"])
+    st.caption(f"All {n_open} open complaints are accounted for. GPS matching was validated on the 4,948 linked complaints, "
+               "where the true road is known from the work order: 96% land on the right segment. Locality-only matching was 28% "
+               "accurate, so it is never used to fund a repair.")
     st.plotly_chart(px.bar(dq, x="coverage", y="link", color="match_class", orientation="h", height=360, text_auto=".0%",
-                           color_discrete_map={"exact": GREEN, "candidate": "#D99A00", "data": GREY},
+                           color_discrete_map={"exact": GREEN, "gps (validated 96%)": "#3E9B57", "candidate": "#D99A00", "unlinked": "#B4380A", "data": GREY},
                            title="How complete is the trail?").update_xaxes(tickformat=".0%", range=[0, 1.05]), width="stretch")
     st.markdown('<span class="badge">Synthetic (organizer)</span> scored core &nbsp; <span class="badge" style="background:#E7F1FB">Live BMC</span> '
                 'awaiting export into data/live/ &nbsp; <span class="badge" style="background:#EFEDFF">Synthetic (NagarLens)</span> our extensions',

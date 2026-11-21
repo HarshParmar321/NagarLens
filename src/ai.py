@@ -113,14 +113,33 @@ SEV = {"Road cave-in": 5, "Open or broken manhole": 5, "Waterlogging": 4, "Potho
        "Choked drain / nullah overflow": 3, "Broken paver blocks": 2, "Not a road issue": 1}
 
 
-def triage(text: str, gazetteer: list[str], reported: str = "") -> dict:
-    out, src = _call("triage", text, TRIAGE_SYSTEM, f"Complaint:\n{text}", TRIAGE_SCHEMA, 800)
+def cached_triage(text: str):
+    """Return a cached model triage (Claude or Ollama) for this text, or None. Never calls a model."""
+    for prov in ("claude", "ollama"):
+        hit = _cache.get(prov + ":" + _key("triage", text).split(":", 1)[1])
+        if hit:
+            return {**hit, "source": "cache"}
+    return None
+
+
+def triage(text: str, gazetteer: list[str], reported: str = "", lang: str = "", allow_call: bool = True) -> dict:
+    out, src = _call("triage", text, TRIAGE_SYSTEM, f"Complaint:\n{text}", TRIAGE_SCHEMA, 800) if allow_call else (None, None)
     if out:
         return {**out, "source": src}
+    hit = cached_triage(text)
+    if hit:
+        return hit
     low = text.lower()
-    # Rules only override the citizen's category when a keyword clearly says otherwise.
-    fallback = reported if reported in SEV else ("Pothole" if reported in ("Road related",) else "Not a road issue")
-    cat = next((c for c, kws in KEYWORDS if any(k in low for k in kws)), fallback)
+    # Rules override the citizen's category only for English text, or when the citizen picked a vague
+    # category ("Road related" / "Other"); keyword rules are weaker than the citizen for Hindi/Marathi/Hinglish.
+    vague = reported in ("Road related", "Other", "")
+    kw = next((c for c, kws in KEYWORDS if any(k in low for k in kws)), None)
+    if vague:
+        cat = kw or "Not a road issue"
+    elif lang in ("en", "") and kw:
+        cat = kw
+    else:
+        cat = reported if reported in SEV else (kw or "Not a road issue")
     loc = next((g for g in gazetteer if g and g.lower() in low), "")
     road = (re.search(r"\b(?:on|at)\s+([A-Z][\w .]+?(?:Road|Marg|Highway|Rd))", text) or [None, ""])[1]
     noise = bool(re.search(r"\b(fwd|forwarded|thank|thanks|dhanyavad)\b", low))
