@@ -18,6 +18,7 @@ from src.audit import RULE_LABEL, recovery_summary, run_audit
 from src.budget import (DEFAULT_WEIGHTS, PLAN_DAYS, allocate, default_budget, excluded_complaints, map_open_complaints,
                         open_issues, road_risk)
 from src.data import load_all
+from src.scorecard import contractor_scorecard, scorecard_text, ward_scorecard
 
 st.set_page_config(page_title="NagarLens", page_icon="🔎", layout="wide")
 INK, BLUE, ORANGE, GREEN, GREY = "#16181D", "#1E4FD8", "#C2410C", "#1E7B34", "#8A8F98"
@@ -36,6 +37,8 @@ st.markdown("""<style>
 .verdict p{color:#16181D}
 .flag{background:#FFF3EC;border:1px solid #E9A988;border-radius:12px;padding:12px 14px;margin-bottom:8px}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:#E4E4DE;color:#2A2D33}
+.rc-chips{display:flex;gap:8px;margin:4px 0 10px}.rc-chip{flex:1;background:#FFFFFF;border:2px solid;border-radius:12px;padding:8px 10px;font-size:13px;color:#16181D}
+.rc-chip .lab{font-size:11px;font-weight:700;text-transform:uppercase;color:#454952}
 .hero{background:#16181D;color:#F6F6F3;border-radius:16px;padding:18px 24px;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center}
 .hero .big{font-size:30px;font-weight:800;line-height:1.1}.hero .lab{font-size:12px;color:#C9CBD1}
 .hero .arrow{font-size:26px;color:#8A8F98}.hero .accent{color:#FF9B6A}.hero .green{color:#7FD99A}
@@ -52,6 +55,11 @@ st.markdown("""<style>
 def data():
     t = load_all()
     return t, run_audit(t)
+
+
+@st.cache_data(show_spinner=False)
+def scorecards(_t, _findings):
+    return contractor_scorecard(_t, _findings), ward_scorecard(_t, _findings)
 
 
 t, findings = data()
@@ -365,34 +373,56 @@ with tabs[3]:
 with tabs[4]:
     st.info("**System problem, not a contractor problem:** 24-hour SLAs are missed on almost every job by everyone, and "
             "warranty-period payments are spread across all contractors. Compare like with like below.")
-    sc = wo.groupby("contractor_name").agg(jobs=("work_order_id", "size"), billed=("cost_inr", "sum"),
-                                           on_time=("sla_met", lambda x: (x == "Y").mean()),
-                                           reopened=("reopened_within_30d", lambda x: (x == "Y").mean()),
-                                           over=("cost_ratio", lambda x: (x > 1.4).mean())).reset_index()
-    sc["contractor"] = sc.contractor_name.str.replace(" (synthetic)", "")
-    a, b = st.columns(2)
+    st.caption("Like for like: speed is compared with peers on the same SLA tier and flood exposure; durability with peers "
+               "using the same repair method. A chip only moves off 'in line' when the gap is at least 3 points and "
+               "more than twice its statistical uncertainty.")
+    kind = st.segmented_control("Scorecards for", ["Contractors", "Wards"], default="Contractors")
+    cs, ws = scorecards(t, findings)
+    S = cs if kind != "Wards" else ws
+    name_col = "contractor" if kind != "Wards" else "ward_label"
+    if kind == "Wards":
+        S = S.assign(ward_label=S.ward_code + " · " + S.ward_name)
+    CHIP = {"better than peers": "#1E7B34", "in line with peers": "#5B6472", "below peers": "#B4380A"}
+    a, b = st.columns([3, 2])
     with a:
-        bub = px.scatter(sc, x="reopened", y="over", size="jobs", color="contractor", height=440, size_max=28,
-                         hover_data={"on_time": ":.0%"}, labels={"reopened": "Fixes re-opened within 30 days",
-                         "over": "Share of bills over 1.4× rate card", "contractor": "Contractor"},
-                         title="Durability vs billing (bubble = jobs; top-right = review first)",
-                         color_discrete_sequence=px.colors.qualitative.Bold)
-        bub.update_xaxes(tickformat=".0%", range=[0, 0.45]); bub.update_yaxes(tickformat=".0%", range=[-0.01, 0.17])
-        st.plotly_chart(bub, width="stretch")
+        d = S.sort_values("reopen_gap")
+        fig = go.Figure()
+        for r_ in d.itertuples():
+            fig.add_scatter(x=[r_.expected_reopen_rate, r_.reopen_rate], y=[getattr(r_, name_col)] * 2, mode="lines",
+                            line=dict(color="#C9CCD2", width=3), showlegend=False, hoverinfo="skip")
+        fig.add_scatter(x=d.expected_reopen_rate, y=d[name_col], mode="markers", name="Expected for the same methods",
+                        marker=dict(size=11, color="#FFFFFF", line=dict(color=INK, width=2)))
+        fig.add_scatter(x=d.reopen_rate, y=d[name_col], mode="markers", name="Actual",
+                        marker=dict(size=13, color=[CHIP[c] for c in d.durability_chip]))
+        fig.update_layout(height=max(320, 26 * len(d) + 120), margin=dict(l=0, r=0, t=40, b=0),
+                          title="Fixes re-opened within 30 days: actual vs expected", legend=dict(orientation="h", y=-0.12))
+        fig.update_xaxes(tickformat=".0%", title=None)
+        st.plotly_chart(fig, width="stretch")
     with b:
-        hm = wo.assign(contractor=wo.contractor_name.str.replace(" (synthetic)", "")).pivot_table(
-            index="contractor", columns="sla_hours", values="sla_met", aggfunc=lambda x: (x == "Y").mean())
-        hm.columns = [f"{c} h" for c in hm.columns]
-        st.plotly_chart(px.imshow(hm, text_auto=".0%", color_continuous_scale="RdYlGn", aspect="auto", height=440,
-                                  labels=dict(x="SLA tier (hours)", color="On time"),
-                                  title="On time within each SLA tier: the fair comparison"), width="stretch")
-    pick_c = st.selectbox("Contractor report card", sc.contractor)
-    row = sc.set_index("contractor").loc[pick_c]
-    cm = wo[(wo.contractor_name.str.startswith(pick_c)) & (wo.repair_method == "Cold mix patch")]
-    k = st.columns(4)
-    kpi(k[0], "Jobs · billed", f"{row.jobs}", inr(row.billed)); kpi(k[1], "On time", f"{row.on_time:.0%}", f"peers {sc.on_time.min():.0%}–{sc.on_time.max():.0%}")
-    kpi(k[2], "Re-opened", f"{row.reopened:.0%}", f"cold mix {(cm.reopened_within_30d=='Y').mean():.0%}")
-    kpi(k[3], "Bills over 1.4×", f"{row.over:.0%}", f"peers {sc.over.min():.0%}–{sc.over.max():.0%}")
+        opts = list(S[name_col])
+        default_i = next((i for i, o in enumerate(opts) if kind == "Wards" and o.startswith(ward + " ·")), 0)
+        pick = st.selectbox("Report card", opts, index=default_i)
+        row = S[S[name_col] == pick].iloc[0]
+        chips = "".join(f'<div class="rc-chip" style="border-color:{CHIP[row[c]]}"><div class="lab">{lab}</div>'
+                        f'<div style="color:{CHIP[row[c]]};font-weight:800">{esc(row[c])}</div></div>'
+                        for lab, c in [("Speed", "speed_chip"), ("Durability", "durability_chip"), ("Cost", "cost_chip")])
+        text, src = ai.scorecard_narrative(row.to_dict(), scorecard_text(row))
+        st.markdown(f'<div class="rc-chips">{chips}</div><div class="verdict"><span class="badge">'
+                    f'{"Written by Claude" if src in ("claude", "ollama", "cache") else "Plain-language summary"}</span>'
+                    f'<p style="margin:8px 0 0;font-size:14.5px;line-height:1.55">{esc(text)}</p></div>', unsafe_allow_html=True)
+        if row.get("small_sample"):
+            st.caption("Small sample: read with care.")
+    with st.expander(f"All {len(S)} {kind.lower()}: the numbers behind the chips"):
+        cols = [name_col, "jobs", "billed_inr", "on_time_rate", "expected_on_time_rate", "reopen_rate", "expected_reopen_rate",
+                "over_rate_card_jobs", "billing_review_inr", "speed_chip", "durability_chip", "cost_chip"]
+        st.dataframe(S[cols], width="stretch", hide_index=True, column_config={
+            name_col: "Name", "jobs": "Jobs", "billed_inr": st.column_config.NumberColumn("Billed (₹)", format="₹%,d"),
+            "on_time_rate": st.column_config.NumberColumn("On time", format="percent"),
+            "expected_on_time_rate": st.column_config.NumberColumn("Expected on time", format="percent"),
+            "reopen_rate": st.column_config.NumberColumn("Re-opened", format="percent"),
+            "expected_reopen_rate": st.column_config.NumberColumn("Expected re-opened", format="percent"),
+            "over_rate_card_jobs": "Bills > 1.4×", "billing_review_inr": st.column_config.NumberColumn("Billing review (₹)", format="₹%,d"),
+            "speed_chip": "Speed", "durability_chip": "Durability", "cost_chip": "Cost"})
 
 # =============== ⑥ NEXT RUPEE ===============
 with tabs[5]:

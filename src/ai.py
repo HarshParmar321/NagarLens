@@ -203,6 +203,20 @@ def answer_citizen(question: str, records: dict) -> tuple[str, str]:
                               held=HELD[lang][w["reopened_within_30d"] == "Y"]), "template"
 
 
+# ---------- 3b. Scorecard narrative (organizer's starter prompt) ----------
+SCORECARD_SYSTEM = ("Write a fair, plain-language scorecard a Mumbai citizen could read, from the computed numbers and the "
+                    "draft given. Cover speed, how long repairs lasted, cost vs the rate card, and one thing to improve. "
+                    "Under 120 words, no accusations, keep every number exactly as given, and say 'compared with peers "
+                    "doing the same kind of work' where the draft compares like with like.")
+
+
+def scorecard_narrative(row: dict, template: str) -> tuple[str, str]:
+    keep = {k: v for k, v in row.items() if not k.endswith("_z") and k not in ("speed_focus", "durability_focus")}
+    out, src = _call("scorecard", {"row": keep, "draft": template}, SCORECARD_SYSTEM,
+                     f"Numbers: {json.dumps(keep, default=str)}\nDraft: {template}", max_tokens=500)
+    return (out, src) if out else (template, "template")
+
+
 # ---------- 4. Ward officer brief ----------
 BRIEF_SYSTEM = ("Write a one-page brief for a Mumbai ward officer from the computed audit leads and plan. Neutral tone, "
                 "no blame. Sections: Top 3 leads to verify (cite work order ids and rupee amounts exactly), "
