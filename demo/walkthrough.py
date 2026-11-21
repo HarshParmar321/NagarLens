@@ -7,17 +7,25 @@ So the voice cannot drift from the picture, whatever voice is used.
 
 Narration source, in this order:
   1. Your own voice: put demo/narration/beat1.wav ... beat7.wav (any length) and they are used as they are.
-     Record them with any recorder while reading NARRATION below. This is the recommended final version.
-  2. --tts sapi (default): the offline Windows voice. No network. A clear guide track, robotic.
-  3. --tts edge: a neural Indian-English voice through the `edge-tts` package. This SENDS THE NARRATION TEXT
-     to Microsoft's online speech service, so only use it if that is acceptable.
+  2. --tts edge (default): Microsoft's neural Indian-English voice through the `edge-tts` package. Free, no account.
+     It SENDS THE NARRATION TEXT to Microsoft's online speech service. Voice: --voice en-IN-NeerjaNeural (female,
+     default) or en-IN-PrabhatNeural (male). Clips are cached in demo/out/tts_cache, so a re-take needs no network
+     unless a line changed.
+  3. --tts elevenlabs: needs ELEVENLABS_API_KEY in the repo-root .env and sends the text to ElevenLabs. Voice:
+     ELEVENLABS_VOICE_ID if set, otherwise the first voice on the account labelled Indian. On ElevenLabs' free plan
+     the API refuses library voices, which is where its Indian voices are, so this needs a paid plan.
+  4. --tts sapi: the offline Windows voice. No network. Robotic; a guide track only.
 
 Run from the repo root with both servers up (API :8000, web app :3000) and Google Chrome installed:
 
-    uv pip install --python .venv playwright imageio-ffmpeg
+    uv pip install --python .venv playwright imageio-ffmpeg edge-tts
     .venv/Scripts/python demo/walkthrough.py            # narrated video -> demo/out/nagarlens_demo.mp4
     .venv/Scripts/python demo/walkthrough.py --fast     # click-path check only, a few seconds, no video
     .venv/Scripts/python demo/walkthrough.py --silent   # video without narration, 2:00 timings
+    .venv/Scripts/python demo/walkthrough.py --narration-only   # make the clips + demo/out/narration_preview.wav, no recording
+    .venv/Scripts/python demo/walkthrough.py --voice en-IN-PrabhatNeural --narration-only   # try the male voice
+    .venv/Scripts/python demo/walkthrough.py --rate +0%         # natural speed (about 2:20 instead of 2:00)
+    .venv/Scripts/python demo/walkthrough.py --list-voices      # Indian voices on your ElevenLabs account
     .venv/Scripts/python demo/walkthrough.py --url http://localhost:3100   # record another copy of the app
 
 Record against a production build (`cd frontend && npm run build && npm run start`) while nobody is editing
@@ -27,10 +35,14 @@ The only data it changes is one officer decision on lead AUD-0133 in the local S
 the take and sets it to "hold for evidence" during the take. Pass --api if the API is not on localhost:8000.
 The narration below must stay word for word the same as the voiceover column in demo/DEMO_SCRIPT.md.
 """
+import hashlib
+import json
+import os
 import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 import wave
 from pathlib import Path
@@ -42,9 +54,21 @@ API = sys.argv[sys.argv.index("--api") + 1] if "--api" in sys.argv else "http://
 HERE = Path(__file__).resolve().parent
 OUT, VOICE_DIR = HERE / "out", HERE / "narration"
 FAST, SILENT = "--fast" in sys.argv, "--silent" in sys.argv
-TTS = sys.argv[sys.argv.index("--tts") + 1] if "--tts" in sys.argv else "sapi"
+try:  # the ElevenLabs key lives in the repo-root .env (never committed)
+    from dotenv import load_dotenv
+    load_dotenv(HERE.parent / ".env")
+except ImportError:
+    pass
+ELEVEN_KEY = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
+TTS = sys.argv[sys.argv.index("--tts") + 1] if "--tts" in sys.argv else "edge"
+EDGE_VOICE = sys.argv[sys.argv.index("--voice") + 1] if "--voice" in sys.argv else os.environ.get("NARRATION_VOICE", "en-IN-NeerjaNeural")
+# The neural voice reads the 2:00 script in about 2:23 at its natural speed; +15% brings it to just under 2:00.
+# Use --rate +0% if the submission allows a longer video.
+EDGE_RATE = sys.argv[sys.argv.index("--rate") + 1] if "--rate" in sys.argv else os.environ.get("NARRATION_RATE", "+15%")
+ELEVEN_API = "https://api.elevenlabs.io"
+ELEVEN_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 QUESTION = "माझी तक्रार BMC25-001690 चं काय झालं?"
-PAUSE = 0.7                      # silence after each clip before the next beat starts
+PAUSE = 0.5                      # silence after each clip before the next beat starts
 RATE, SAMPLE_WIDTH = 44100, 2    # audio track format: 44.1 kHz, 16-bit, mono
 
 # name, fallback seconds when silent, narration
@@ -71,6 +95,7 @@ NARRATION = [
 ]
 # Spellings that help a synthetic voice; the words spoken are the same.
 SAY_AS = {"NagarLens": "Nagar Lens", "LBS Marg": "L B S Marg", "lakh": "laakh", "re-opens": "reopens"}
+SAY_AS_INDIAN = {"NagarLens": "Nagar Lens", "LBS Marg": "L.B.S. Marg"}   # an Indian voice already says lakh and crore
 
 
 # ------------------------------------------------------------------ narration clips
@@ -79,26 +104,110 @@ def ffmpeg() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def to_track_format(src: Path, dst: Path):
-    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-ar", str(RATE),
-                    "-sample_fmt", "s16", str(dst)], check=True)
+TRIM = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,"
+        "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse")
+
+
+def to_track_format(src: Path, dst: Path, trim: bool = False):
+    """Convert a clip to the track format. trim=True cuts the silence a speech service pads each clip with."""
+    cmd = [ffmpeg(), "-y", "-loglevel", "error", "-i", str(src)] + (["-af", TRIM] if trim else [])
+    subprocess.run(cmd + ["-ac", "1", "-ar", str(RATE), "-sample_fmt", "s16", str(dst)], check=True)
+
+
+class NarrationError(RuntimeError):
+    pass
+
+
+def eleven(path: str, body: dict | None = None, accept: str = "application/json") -> bytes:
+    """One call to the ElevenLabs API. Raises NarrationError with the service's own message on failure."""
+    if not ELEVEN_KEY:
+        raise NarrationError("ELEVENLABS_API_KEY is not set in the repo-root .env")
+    req = urllib.request.Request(ELEVEN_API + path, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"xi-api-key": ELEVEN_KEY, "accept": accept, "Content-Type": "application/json"})
+    try:
+        return urllib.request.urlopen(req, timeout=120).read()
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read()).get("detail", {})
+            msg = detail.get("message", detail) if isinstance(detail, dict) else detail
+        except Exception:
+            msg = e.reason
+        hint = " ElevenLabs rejected the key in .env: check it." if e.code in (400, 401) and "key" in str(msg).lower() else ""
+        raise NarrationError(f"ElevenLabs {e.code} on {path.split('?')[0]}: {msg}{hint}") from None
+
+
+def indian_voices() -> list[dict]:
+    """Voices on the account whose labels, languages or description say Indian."""
+    voices = json.loads(eleven("/v2/voices?page_size=100")).get("voices", [])
+    out = []
+    for v in voices:
+        blob = json.dumps([v.get("labels"), v.get("verified_languages"), v.get("description"), v.get("name")]).lower()
+        if "india" in blob or "en-in" in blob:
+            out.append(v)
+    return out
+
+
+_voice = {}
+
+
+def eleven_voice() -> str:
+    if "id" not in _voice:
+        chosen = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
+        if chosen:
+            _voice["id"], _voice["name"] = chosen, "ELEVENLABS_VOICE_ID"
+        else:
+            found = indian_voices()
+            if not found:
+                raise NarrationError("No Indian voice on this ElevenLabs account. Open the Voice Library, filter by "
+                                     "accent Indian, add one to My Voices, then re-run; or set ELEVENLABS_VOICE_ID in .env.")
+            _voice["id"], _voice["name"] = found[0]["voice_id"], found[0].get("name", "")
+        print(f"ElevenLabs voice: {_voice['name']} ({_voice['id']}), model {ELEVEN_MODEL}")
+    return _voice["id"]
 
 
 def synthesize(text: str, dst: Path):
+    if TTS == "elevenlabs":
+        for k, v in SAY_AS_INDIAN.items():
+            text = text.replace(k, v)
+        voice = eleven_voice()
+        cache = OUT / "tts_cache" / f"el_{voice}_{hashlib.sha256((ELEVEN_MODEL + text).encode()).hexdigest()[:16]}.mp3"
+        if not cache.exists():   # only new or changed lines are sent, so a re-take costs nothing
+            audio = eleven(f"/v1/text-to-speech/{voice}?output_format=mp3_44100_128", accept="audio/mpeg", body={
+                "text": text, "model_id": ELEVEN_MODEL,
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": True}})
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_bytes(audio)
+        to_track_format(cache, dst, trim=True)
+        return
+    if TTS == "edge":
+        for k, v in SAY_AS_INDIAN.items():
+            text = text.replace(k, v)
+        cache = OUT / "tts_cache" / f"edge_{EDGE_VOICE}_{hashlib.sha256((EDGE_RATE + text).encode()).hexdigest()[:16]}.mp3"
+        if not cache.exists():
+            try:
+                import asyncio
+
+                import edge_tts
+            except ImportError:
+                raise NarrationError("edge-tts is not installed: uv pip install --python .venv edge-tts") from None
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache.with_suffix(".part")
+            try:
+                asyncio.run(edge_tts.Communicate(text, EDGE_VOICE, rate=EDGE_RATE).save(str(tmp)))
+            except Exception as e:
+                tmp.unlink(missing_ok=True)
+                raise NarrationError(f"Microsoft speech service failed for voice {EDGE_VOICE}: {e}") from None
+            tmp.replace(cache)
+        to_track_format(cache, dst, trim=True)
+        return
     for k, v in SAY_AS.items():
         text = text.replace(k, v)
-    if TTS == "edge":
-        import asyncio
-
-        import edge_tts
-        raw = dst.with_suffix(".mp3")
-        asyncio.run(edge_tts.Communicate(text, "en-IN-NeerjaNeural", rate="+4%").save(str(raw)))
-    else:  # offline Windows voice
-        raw = dst.with_suffix(".raw.wav")
-        script = ("Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-                  "try { $s.SelectVoice('Microsoft Zira Desktop') } catch {}; $s.Rate = 1; "
-                  f"$s.SetOutputToWaveFile('{raw}'); $s.Speak([Console]::In.ReadToEnd()); $s.Dispose()")
-        subprocess.run(["powershell", "-NoProfile", "-Command", script], input=text.encode("utf-8"), check=True)
+    # offline Windows voice
+    raw = dst.with_suffix(".raw.wav")
+    script = ("Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+              "try { $s.SelectVoice('Microsoft Zira Desktop') } catch {}; $s.Rate = 1; "
+              f"$s.SetOutputToWaveFile('{raw}'); $s.Speak([Console]::In.ReadToEnd()); $s.Dispose()")
+    subprocess.run(["powershell", "-NoProfile", "-Command", script], input=text.encode("utf-8"), check=True)
     to_track_format(raw, dst)
     raw.unlink(missing_ok=True)
 
@@ -119,7 +228,7 @@ def prepare_clips() -> list[Path]:
             src = "your recording"
         else:
             synthesize(text, dst)
-            src = f"{TTS} voice"
+            src = f"{EDGE_VOICE} (Microsoft)" if TTS == "edge" else f"{TTS} voice"
         print(f"narration {i} ({name}): {clip_seconds(dst):.1f}s from {src}")
         clips.append(dst)
     return clips
@@ -144,6 +253,20 @@ def build_track(clips: list[Path], starts: list[float], total: float, dst: Path)
 # ------------------------------------------------------------------ the take
 def main():
     OUT.mkdir(exist_ok=True)
+    if "--list-voices" in sys.argv:
+        for v in indian_voices():
+            print(v["voice_id"], "|", v.get("name"), "|", v.get("category"), "|", v.get("labels"))
+        return 0
+    if "--narration-only" in sys.argv:      # hear the voice without recording the screen
+        clips = prepare_clips()
+        starts, t = [], 0.3
+        for c in clips:
+            starts.append(t)
+            t += clip_seconds(c) + PAUSE
+        preview = OUT / f"narration_preview_{EDGE_VOICE if TTS == 'edge' else TTS}.wav"
+        build_track(clips, starts, t, preview)
+        print(f"preview: {preview}  ({t:.0f}s of a 120s limit)")
+        return 0
     # Clear any decision saved by a rehearsal, so the "Hold for evidence" click visibly changes the screen.
     try:
         urllib.request.urlopen(urllib.request.Request(f"{API}/api/findings/AUD-0133/review", method="DELETE"), timeout=10)
@@ -314,4 +437,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except NarrationError as e:   # never fall back to the robotic voice silently: the take would look finished
+        print(f"\nNARRATION FAILED: {e}\nNothing was recorded. Fix it, or pass --tts sapi for the offline voice.")
+        sys.exit(2)

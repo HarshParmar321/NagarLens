@@ -17,3 +17,4 @@ httpx
 # optional: demo/walkthrough.py (scripted demo recording)
 playwright
 imageio-ffmpeg
+edge-tts

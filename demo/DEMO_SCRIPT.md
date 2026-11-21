@@ -18,7 +18,7 @@ The whole video stays in one ward, **L · Kurla**, so the viewer follows one pla
 | 13:45 | Run `demo/check_demo.py` and `demo/walkthrough.py --fast`; read the script aloud once against a timer | Kshitij |
 | 14:00 | PRs open. Decide which teammate beats are in (table below) | Kshitij |
 | 14:15 | Merge cut-off. Re-run both checks on `main` | lead session |
-| 13:45–14:15 | Record the seven narration clips in your own voice (see "How the video is made") | Kshitij |
+| before 14:15 | Listen to the narration preview (`--narration-only`) and pick the female or male Indian voice | Kshitij |
 | 14:15–14:30 | Build the video: `.venv/Scripts/python demo/walkthrough.py`. Watch it once end to end | Kshitij |
 | 14:30–14:45 | Internal review against the checklist at the bottom; one re-take if needed | whole team |
 | 14:45 | Export 1080p MP4, upload, paste the link in the submission form | Kshitij |
@@ -84,16 +84,24 @@ Longer or shorter narration just makes that beat longer or shorter; picture and 
 .venv/Scripts/python demo/walkthrough.py --fast    # every beat "ok", "page errors: none"
 ```
 
-**Step 2: narration**. Pick one:
+**Step 2: narration**. The build picks the voice in this order:
 
-- **Your own voice (recommended for the submission).** Record seven WAV files, one per beat, reading the voiceover
-  column above, and save them as `demo/narration/beat1.wav` … `beat7.wav`. Any recorder works (Windows Voice Recorder,
-  Audacity, a phone). Leave no long silence at the start or end. Beats without a file fall back to the synthetic voice,
-  so you can replace them one at a time.
-- **Offline synthetic voice (default).** Nothing to do. It uses the Windows voice on this laptop: clear, robotic,
-  no network. Good for rehearsal and as a guide track.
-- **Neural Indian-English voice.** `uv pip install --python .venv edge-tts`, then add `--tts edge`. This sends the
-  narration text to Microsoft's online speech service, so use it only if that is acceptable.
+1. **Your own recording**, if `demo/narration/beat1.wav` … `beat7.wav` exist (one per beat, reading the voiceover column
+   above). Beats without a file use the voice below, so you can replace them one at a time.
+2. **Microsoft neural Indian-English voice (the default, chosen by the lead).** Free, no account or key. It sends the
+   narration text to Microsoft's online speech service. One-time install: `uv pip install --python .venv edge-tts`.
+   - Female `en-IN-NeerjaNeural` is the default: the 2:00 script comes out at 1:57 of narration.
+   - Male: add `--voice en-IN-PrabhatNeural` (about 2:02, so also add `--rate +18%` to stay under two minutes).
+   - Speed is `--rate +15%` by default, because at natural speed the voice needs about 2:23. Use `--rate +0%` only
+     if the submission allows a longer video.
+   - Listen before recording: `.venv/Scripts/python demo/walkthrough.py --narration-only` makes the seven clips and
+     `demo/out/narration_preview_<voice>.wav` without touching the screen.
+   - Clips are cached in `demo/out/tts_cache/`, so the final take needs no network unless a line changed.
+   - If the service fails, the build stops with the reason. It never falls back to the robotic voice on its own.
+3. **ElevenLabs** (`--tts elevenlabs`, key in `.env` as `ELEVENLABS_API_KEY`). Tested on 21 Nov: the key works, but on
+   the free plan the API refuses library voices, and ElevenLabs' Indian voices are library voices. It works with no
+   code change after a plan upgrade; `--list-voices` shows the Indian voices on the account.
+4. **Offline Windows voice** (`--tts sapi`): no network, robotic. For rehearsal only.
 
 **Step 3: build**
 
@@ -102,7 +110,7 @@ Longer or shorter narration just makes that beat longer or shorter; picture and 
 ```
 
 It takes about as long as the video. It prints the second each beat starts and saves one still per beat next to
-the MP4. With the synthetic voice the 2:00 cut comes out at 1:57. `demo/out/` is ignored by git; upload the MP4
+the MP4. With the default voice the 2:00 cut comes out at about 1:59; another voice or speed changes the length, never the sync. `demo/out/` is ignored by git; upload the MP4
 to the submission, do not commit it.
 
 Rules for a clean take:
