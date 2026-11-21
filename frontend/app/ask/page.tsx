@@ -46,9 +46,9 @@ export default function AskPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Your question"
-            className="min-w-[260px] flex-1 rounded-lg border border-[#D5D6D0] bg-white px-3 py-2 text-[16px]"
+            className="min-h-11 min-w-0 flex-1 basis-60 rounded-lg border border-[#D5D6D0] bg-white px-3 py-2 text-[16px]"
           />
-          <button type="submit" disabled={ask.isPending} className="rounded-lg bg-[#1E4FD8] px-5 py-2 text-[14px] font-bold text-white disabled:opacity-60">
+          <button type="submit" disabled={ask.isPending} className="min-h-11 rounded-lg bg-[#1E4FD8] px-5 py-2 text-[14px] font-bold text-white disabled:opacity-60">
             {ask.isPending ? "Asking…" : "Ask"}
           </button>
         </form>
@@ -61,7 +61,7 @@ export default function AskPage() {
                 setQ(text);
                 submit(text);
               }}
-              className="rounded-full border border-[#D5D6D0] bg-white px-3 py-1 font-semibold text-[#16181D] hover:border-[#1E4FD8]"
+              className="min-h-11 rounded-full border border-[#D5D6D0] bg-white px-3.5 py-1.5 font-semibold text-[#16181D] hover:border-[#1E4FD8]"
               title={text}
             >
               {lang}
@@ -81,7 +81,7 @@ export default function AskPage() {
         <>
           <div className="rounded-2xl border border-[#A9BEF0] bg-[#EEF3FD] p-5">
             <SourceBadge source={d.source} />
-            <p className="mt-2 whitespace-pre-line text-[18px] leading-relaxed text-[#16181D]">{d.answer}</p>
+            <p lang={d.language === "mr" ? "mr" : d.language === "hi" ? "hi" : "en"} className="mt-2 whitespace-pre-line text-[18px] leading-relaxed text-[#16181D]">{d.answer}</p>
             {d.status_note ? <p className="mt-3 border-t border-[#C9D7F5] pt-2 text-[13.5px] text-[#2A2D33]">{d.status_note}</p> : null}
           </div>
 
@@ -96,7 +96,7 @@ export default function AskPage() {
                   label="Outcome"
                   value={w.reopened_within_30d === "Y" ? "Re-opened" : "Held"}
                   sub={`${w.sla_met === "Y" ? "on time" : "late"} · ${w.sla_hours} h SLA`}
-                  tone={w.reopened_within_30d === "Y" ? "#B07A00" : "#1E7B34"}
+                  tone={w.reopened_within_30d === "Y" ? "#8A5A00" : "#1E7B34"}
                 />
               </>
             ) : (

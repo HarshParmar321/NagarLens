@@ -18,7 +18,7 @@ export function Kpi({ label, value, sub, tone }: { label: string; value: React.R
 // Every number carries its data layer. Today the only layer is the organizer's synthetic dataset.
 export function DataBadge({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-block rounded-full bg-[#E4E4DE] px-2.5 py-0.5 text-[11px] font-bold text-[#2A2D33]", className)}>
+    <span className={cn("inline-block whitespace-nowrap rounded-full bg-[#E4E4DE] px-2.5 py-0.5 text-[11px] font-bold text-[#2A2D33]", className)}>
       Synthetic (organizer)
     </span>
   );
@@ -33,7 +33,7 @@ const CHIP_TONE: Record<string, string> = {
 export function PeerChip({ label, value }: { label: string; value: string }) {
   return (
     <div className={cn("flex-1 rounded-lg border px-3 py-2 text-[13px]", CHIP_TONE[value] ?? CHIP_TONE["in line with peers"])}>
-      <div className="text-[11px] font-bold uppercase tracking-wide opacity-80">{label}</div>
+      <div className="text-[11px] font-bold uppercase tracking-wide">{label}</div>
       <div className="font-semibold">{value}</div>
     </div>
   );
@@ -41,7 +41,7 @@ export function PeerChip({ label, value }: { label: string; value: string }) {
 
 export function Pill({ children, color = "#2A2D33", bg = "#E4E4DE" }: { children: React.ReactNode; color?: string; bg?: string }) {
   return (
-    <span className="inline-block rounded-full px-2.5 py-0.5 text-[11.5px] font-bold" style={{ color, background: bg }}>
+    <span className="inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold" style={{ color, background: bg }}>
       {children}
     </span>
   );

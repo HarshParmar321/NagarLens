@@ -34,10 +34,10 @@ export const qs = (params: Record<string, string | number | boolean | undefined 
 
 export const RULE_COLOR: Record<string, string> = {
   overbilled_vs_rate_card: "#C2410C",
-  duplicate_bill: "#1E4FD8",
+  duplicate_bill: "#0F766E", // teal: blue is reserved for selection
   dlp_paid_by_bmc: "#5B4BC4",
-  reopened_fix: "#B07A00",
-  sla_missed: "#8A8F98",
+  reopened_fix: "#8A5A00",
+  sla_missed: "#6A6F78",
 };
 
 export const DECISION_LABEL: Record<string, string> = {

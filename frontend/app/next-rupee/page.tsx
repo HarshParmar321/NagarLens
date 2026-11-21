@@ -71,7 +71,7 @@ export default function NextRupeePage() {
   };
 
   return (
-    <div className={`space-y-5 ${stale || plan.isFetching ? "opacity-70 transition-opacity" : ""}`}>
+    <div className={`space-y-5 ${stale || plan.isFetching ? "opacity-85 transition-opacity" : ""}`}>
       <PageTitle
         title={`Where should ward ${ward}'s next rupee go?`}
         sub="Open complaints are merged into issues, matched to a road and ranked by public risk. Costs are estimates from the rate card."
@@ -205,8 +205,8 @@ function IssueCard({ it, rank }: { it: any; rank: number }) {
   const score = Math.max(0, Math.min(100, Number(it.risk_score) || 0));
   const chips = String(it.why ?? "").split("; ").filter(Boolean);
   return (
-    <div className="flex gap-3 rounded-xl border border-[#EDEDE8] bg-white px-3.5 py-2.5">
-      <div className="w-7 shrink-0 pt-0.5 text-center text-[18px] font-extrabold text-[#8A8F98]">{rank}</div>
+    <div className="flex flex-col gap-2 rounded-xl border border-[#EDEDE8] bg-white px-3.5 py-2.5 sm:flex-row sm:gap-3">
+      <div className="shrink-0 sm:w-7 sm:pt-0.5 sm:text-center"><span className="text-[18px] font-extrabold text-[#6A6F78]">{rank}</span></div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-[14.5px] font-bold">{it.road_name ?? "Road not identified"}</span>
@@ -229,8 +229,8 @@ function IssueCard({ it, rank }: { it: any; rank: number }) {
         </div>
         {it.reason ? <div className="mt-1 text-[12.5px] font-semibold text-[#7A4B00]">{it.reason}</div> : null}
       </div>
-      <div className="w-36 shrink-0 text-right">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-[#454952]">Risk {score.toFixed(1)}</div>
+      <div className="w-full shrink-0 sm:w-36 sm:text-right">
+        <div className="text-[11.5px] font-bold text-[#454952]">Risk {score.toFixed(1)} / 100</div>
         <div className="mt-1 h-2 rounded bg-[#EFEFEA]" title="Risk score, 0 to 100, normalised across the city">
           <div className="h-2 rounded bg-[#1E4FD8]" style={{ width: `${score}%` }} />
         </div>

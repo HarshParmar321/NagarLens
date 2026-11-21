@@ -45,7 +45,7 @@ export default function AuditPage() {
         </label>
         {["", ...FLAG_RULES].map((r) => (
           <button key={r} onClick={() => { setRule(r); setPicked(null); }}
-            className={`rounded-full border px-3 py-1 font-semibold ${rule === r ? "border-[#1E4FD8] bg-[#E3EBFD] text-[#17306E]" : "border-[#D5D6D0] bg-white"}`}>
+            className={`min-h-10 rounded-full border px-3 py-1.5 font-semibold ${rule === r ? "border-[#1E4FD8] bg-[#E3EBFD] text-[#17306E]" : "border-[#D5D6D0] bg-white"}`}>
             {r ? list.data.rules.find((x: any) => x.rule_id === r)?.label : "All rules"}
           </button>
         ))}
@@ -55,13 +55,13 @@ export default function AuditPage() {
       <div className="grid gap-5 lg:grid-cols-5">
         <div className="lg:col-span-2">
           <Section title="Leads" hint="Largest amount first. Click one to see its evidence.">
-            <div className="max-h-[620px] space-y-1.5 overflow-auto pr-1">
+            <div className="space-y-1.5 pr-1 lg:max-h-[620px] lg:overflow-auto">
               {rows.map((f) => (
-                <button key={f.finding_id} onClick={() => setPicked(f.finding_id)}
+                <button key={f.finding_id} onClick={() => { setPicked(f.finding_id); if (window.innerWidth < 1024) setTimeout(() => document.getElementById("evidence")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
                   className={`w-full rounded-lg border px-3 py-2 text-left text-[13px] ${current === f.finding_id ? "border-[#1E4FD8] bg-[#F3F6FE]" : "border-[#EDEDE8] bg-white hover:border-[#B9BDC6]"}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold" style={{ color: RULE_COLOR[f.rule_id] }}>{f.rule}</span>
-                    <span className="font-bold">{inr(f.amount_at_risk_inr)}</span>
+                    <span className="whitespace-nowrap font-bold">{inr(f.amount_at_risk_inr)}</span>
                   </div>
                   <div className="text-[#454952]">{f.work_order_id} · ward {f.ward_code} · {f.contractor}{f.borderline ? " · borderline" : ""}</div>
                 </button>
@@ -70,7 +70,7 @@ export default function AuditPage() {
             </div>
           </Section>
         </div>
-        <div className="lg:col-span-3">{current ? <Evidence id={current} /> : <Loading label="Pick a lead" />}</div>
+        <div id="evidence" className="scroll-mt-4 lg:col-span-3">{current ? <Evidence id={current} /> : <Loading label="Pick a lead" />}</div>
       </div>
     </div>
   );
@@ -89,7 +89,7 @@ function Evidence({ id }: { id: string }) {
 
   return (
     <Section title={`${f.rule} · ${f.work_order_id}`} hint={`${f.finding_id} · ward ${f.ward_code} · ${f.contractor}`}
-      right={<div className="text-right"><div className="text-[11px] font-bold uppercase text-[#454952]">To review</div><div className="text-[24px] font-extrabold" style={{ color }}>{inr(f.amount_at_risk_inr)}</div></div>}>
+      right={<div className="text-right"><div className="text-[11px] font-bold uppercase text-[#454952]">To review</div><div className="whitespace-nowrap text-[24px] font-extrabold" style={{ color }}>{inr(f.amount_at_risk_inr)}</div></div>}>
       <div className="mb-3 flex gap-2"><Pill>Needs review</Pill><DataBadge /></div>
 
       {f.rule_id === "duplicate_bill" && e.twin ? (
@@ -145,7 +145,7 @@ function Evidence({ id }: { id: string }) {
         <div className="flex flex-wrap gap-2">
           {q.data.decisions.map((d: string) => (
             <button key={d} onClick={() => decide.mutate(d)} disabled={decide.isPending}
-              className={`rounded-lg border px-3 py-1.5 text-[13px] font-semibold ${q.data.review?.decision === d ? "border-[#16181D] bg-[#16181D] text-white" : "border-[#D5D6D0] bg-white hover:border-[#16181D]"}`}>
+              className={`min-h-11 rounded-lg border px-4 py-2 text-[13.5px] font-semibold ${q.data.review?.decision === d ? "border-[#16181D] bg-[#16181D] text-white" : "border-[#D5D6D0] bg-white hover:border-[#16181D]"}`}>
               {DECISION_LABEL[d] ?? d}
             </button>
           ))}

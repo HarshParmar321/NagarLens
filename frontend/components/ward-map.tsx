@@ -48,7 +48,7 @@ export default function WardMap({ geo, rows, ward, onSelect, height = 460 }: {
         />
       </MapContainer>
       <div className="mt-2 flex items-center gap-2 text-[11.5px] text-[#454952]">
-        To review (billed ₹, counted once):
+        ₹ to review:
         {SCALE.map((c) => (
           <span key={c} className="inline-block h-3 w-7 rounded-sm" style={{ background: c }} />
         ))}

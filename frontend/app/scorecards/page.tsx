@@ -43,10 +43,10 @@ export default function ScorecardsPage() {
               <PeerChip label="Durability" value={r.durability_chip} />
               <PeerChip label="Cost" value={r.cost_chip} />
             </div>
-            <div className="grid grid-cols-3 gap-2 text-[12.5px]">
-              <Versus label="On time" actual={r.on_time_rate} expected={r.expected_on_time_rate} higherIsBetter />
-              <Versus label="Re-opened in 30 days" actual={r.reopen_rate} expected={r.expected_reopen_rate} />
-              <Versus label="Bills above 1.4× rate card" actual={r.over_rate_card_share} expected={r.peer_over_rate_card_share} />
+            <div className="grid grid-cols-1 gap-2 text-[12.5px] sm:grid-cols-3">
+              <Versus label="On time" actual={r.on_time_rate} expected={r.expected_on_time_rate} verdict={r.speed_chip} />
+              <Versus label="Re-opened in 30 days" actual={r.reopen_rate} expected={r.expected_reopen_rate} verdict={r.durability_chip} />
+              <Versus label="Bills above 1.4× rate card" actual={r.over_rate_card_share} expected={r.peer_over_rate_card_share} verdict={r.cost_chip} />
             </div>
             <p className="mt-3 text-[13.5px] leading-relaxed">{r.text}</p>
           </div>
@@ -55,26 +55,26 @@ export default function ScorecardsPage() {
 
       {tiers.data ? (
         <Section title="On time within each SLA tier: urgent jobs are late for everyone" hint="Share of jobs finished inside the SLA. Darker = more often on time.">
-          <table className="w-full text-center text-[13px]">
-            <thead><tr><th className="text-left">Contractor</th>{tiers.data.tiers.map((t: number) => <th key={t} className="py-1">{t} h</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-center text-[13px]">
+            <thead><tr><th className="text-left">Contractor</th>{tiers.data.tiers.map((t: number) => <th key={t} className="whitespace-nowrap py-1">{t} h</th>)}</tr></thead>
             <tbody>
               {tiers.data.rows.map((row: any) => (
-                <tr key={row.contractor} className={row.contractor === "All contractors" ? "font-bold" : ""}>
+                <tr key={row.contractor} className={row.contractor === "All contractors" ? "border-t-2 border-[#16181D] font-bold" : ""}>
                   <td className="py-1 pr-3 text-left">{row.contractor}</td>
                   {row.cells.map((c: any) => (
                     <td key={c.sla_hours} className="p-0.5">
-                      <div className="rounded py-1.5" title={`${c.jobs} jobs`} style={{ background: `rgba(30,79,216,${0.06 + 0.84 * c.on_time_rate})`, color: c.on_time_rate > 0.5 ? "#fff" : "#16181D" }}>{pct(c.on_time_rate)}</div>
+                      <div className="rounded py-1.5" title={`${c.jobs} jobs`} style={{ background: `rgba(30,79,216,${0.04 + 0.56 * c.on_time_rate})`, color: "#16181D" }}>{pct(c.on_time_rate)}</div>
                     </td>
                   ))}
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <div aria-label="Legend" className="mt-3 flex items-center justify-end gap-2 text-[12.5px] text-[#2A2D33]">
             <span>Share finished inside the SLA:</span>
             {[0, 0.25, 0.5, 0.75, 1].map((v) => (
               <span key={v} className="flex flex-col items-center">
-                <span className="inline-block h-3 w-9 rounded-sm" style={{ background: `rgba(30,79,216,${0.06 + 0.84 * v})` }} />
+                <span className="inline-block h-3 w-9 rounded-sm" style={{ background: `rgba(30,79,216,${0.04 + 0.56 * v})` }} />
                 <span className="text-[11px] text-[#454952]">{Math.round(v * 100)}%</span>
               </span>
             ))}
@@ -89,12 +89,18 @@ export default function ScorecardsPage() {
   );
 }
 
-function Versus({ label, actual, expected, higherIsBetter }: { label: string; actual: number; expected: number; higherIsBetter?: boolean }) {
-  const better = higherIsBetter ? actual >= expected : actual <= expected;
+// Colour follows the chip verdict (same 3-point / 2-SE test), so a number never contradicts its chip.
+const VERDICT_TONE: Record<string, [string, string]> = {
+  "better than peers": ["#1E7B34", "▲ "],
+  "below peers": ["#8A5A00", "▼ "],
+  "in line with peers": ["#2A2D33", ""],
+};
+function Versus({ label, actual, expected, verdict }: { label: string; actual: number; expected: number; verdict?: string }) {
+  const [tone, mark] = VERDICT_TONE[verdict ?? ""] ?? VERDICT_TONE["in line with peers"];
   return (
     <div className="rounded-lg bg-[#F6F6F3] px-2.5 py-2">
       <div className="text-[11px] text-[#454952]">{label}</div>
-      <div className="text-[18px] font-extrabold" style={{ color: better ? "#1E7B34" : "#B07A00" }}>{pct(actual)}</div>
+      <div className="text-[18px] font-extrabold" style={{ color: tone }}><span aria-hidden>{mark}</span>{pct(actual)}</div>
       <div className="text-[11px] text-[#454952]">peers on same mix: {pct(expected)}</div>
     </div>
   );

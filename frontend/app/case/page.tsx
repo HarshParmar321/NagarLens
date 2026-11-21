@@ -13,7 +13,7 @@ import { useWard } from "../providers";
 // Follow one case: complaint(s) -> work order -> repair -> bill vs rate card -> did it hold -> audit leads.
 // Every number comes from GET /api/cases/{id}; the verdict text from GET /api/cases/{id}/verdict.
 
-const TONE: Record<string, string> = { ok: "#1E7B34", warn: "#B07A00", flag: "#C2410C", na: "#8A8F98" };
+const TONE: Record<string, string> = { ok: "#1E7B34", warn: "#8A5A00", flag: "#C2410C", na: "#8A8F98" };
 
 export default function CasePage() {
   const { ward } = useWard();
@@ -33,15 +33,15 @@ export default function CasePage() {
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
         {(presets.data ?? []).map((p: any) => (
           <button key={p.work_order_id} onClick={() => setPicked(p.work_order_id)}
-            className={`rounded-full border px-3 py-1 font-semibold ${id === p.work_order_id ? "border-[#1E4FD8] bg-[#E3EBFD] text-[#17306E]" : "border-[#D5D6D0] bg-white"}`}>
+            className={`min-h-10 rounded-full border px-3 py-1.5 font-semibold ${id === p.work_order_id ? "border-[#1E4FD8] bg-[#E3EBFD] text-[#17306E]" : "border-[#D5D6D0] bg-white"}`}>
             {p.label} <span className="font-normal text-[#454952]">· {p.place}</span>
           </button>
         ))}
-        <label className="ml-auto flex items-center gap-1.5 font-semibold">
+        <label className="flex w-full flex-col items-start gap-1.5 font-semibold md:ml-auto md:w-auto md:flex-row md:items-center">
           Any work order in ward {ward}
           <select aria-label="Work order" value={inWard.data?.rows?.some((r: any) => r.work_order_id === id) ? id ?? "" : ""}
             onChange={(e) => e.target.value && setPicked(e.target.value)}
-            className="max-w-[340px] rounded-lg border border-[#D5D6D0] bg-white px-2 py-1 font-normal">
+            className="min-h-10 w-full max-w-full rounded-lg border border-[#D5D6D0] bg-white px-2 py-1 font-normal md:max-w-[340px]">
             <option value="">Choose…</option>
             {(inWard.data?.rows ?? []).map((r: any) => (
               <option key={r.work_order_id} value={r.work_order_id}>
@@ -141,9 +141,9 @@ function CaseView({ d, verdict, verdictLoading }: { d: any; verdict: any; verdic
         <Section title="How much: bill against the rate card" hint="Normal jobs fall between 0.75× and 1.3× of the rate-card cost.">
           {([["Rate card cost", bill.expected_cost_inr, "#8A8F98", "1.00×"], ["Upper end of normal", bill.upper_normal_inr, "#B9BDC6", "1.30×"],
             ["Billed", bill.billed_inr, bill.flagged ? "#C2410C" : "#1E7B34", `${bill.cost_ratio}×`]] as [string, number, string, string][]).map(([label, v, c, note]) => (
-            <div key={label} className="my-2 grid grid-cols-[140px_1fr_130px] items-center gap-3 text-[13px]">
+            <div key={label} className="my-2 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 text-[13px] md:grid-cols-[140px_1fr_130px]">
               <span className="text-[#454952]">{label}</span>
-              <div className="h-5 rounded bg-[#EFEFEA]"><div className="h-5 rounded" style={{ width: `${Math.max(2, (100 * v) / Math.max(bill.billed_inr, bill.upper_normal_inr))}%`, background: c }} /></div>
+              <div className="order-3 col-span-2 h-5 rounded bg-[#EFEFEA] md:order-none md:col-span-1"><div className="h-5 rounded" style={{ width: `${Math.max(2, (100 * v) / Math.max(bill.billed_inr, bill.upper_normal_inr))}%`, background: c }} /></div>
               <span className="text-right font-bold">{inrFull(v)} <span className="font-normal text-[#454952]">{note}</span></span>
             </div>
           ))}
@@ -173,7 +173,7 @@ function CaseView({ d, verdict, verdictLoading }: { d: any; verdict: any; verdic
           ? <Pill color="#3A2E8C" bg="#EFEDFF">Under warranty · resurfaced {when(d.road.last_resurfaced, false)}</Pill>
           : <Pill>Warranty expired · resurfaced {when(d.road.last_resurfaced, false)}</Pill>}>
         <div className="max-h-[420px] overflow-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full min-w-[760px] text-[12.5px]">
             <thead className="sticky top-0 bg-white text-left text-[11px] uppercase tracking-wide text-[#454952]">
               <tr><th className="py-1">Assigned</th><th>Work order</th><th>Work type</th><th>Method</th><th>Contractor</th><th className="text-right">Billed</th><th className="pl-3">Outcome</th><th>Leads</th></tr>
             </thead>
@@ -184,7 +184,7 @@ function CaseView({ d, verdict, verdictLoading }: { d: any; verdict: any; verdic
                   <td>{h.work_order_id}{h.is_this_case ? " ◀ this case" : ""}</td>
                   <td>{h.work_type}</td><td>{h.repair_method}</td><td>{h.contractor}</td>
                   <td className="text-right">{inrFull(h.cost_inr)}</td>
-                  <td className="pl-3" style={{ color: h.reopened_within_30d === "Y" ? "#B07A00" : "#1E7B34" }}>{h.reopened_within_30d === "Y" ? "Failed in 30 days" : "Held"}</td>
+                  <td className="pl-3" style={{ color: h.reopened_within_30d === "Y" ? "#8A5A00" : "#1E7B34" }}>{h.reopened_within_30d === "Y" ? "Failed in 30 days" : "Held"}</td>
                   <td className="text-[#C2410C]">{h.flags.join(", ")}</td>
                 </tr>
               ))}
@@ -230,7 +230,7 @@ function SlaClock({ t, slaHours, onTime }: { t: any; slaHours: number; onTime: b
         <Stamp label="First complaint" value={t.first_complaint_at ? when(t.first_complaint_at) : "none linked"} />
         <Stamp label="Assigned" value={when(t.assigned_at)} />
         <Stamp label="Completed" value={when(t.completed_at)} />
-        <Stamp label="SLA deadline" value={when(t.sla_deadline)} tone={onTime ? "#1E7B34" : "#B07A00"} sub={onTime ? "met" : "missed"} />
+        <Stamp label="SLA deadline" value={when(t.sla_deadline)} tone={onTime ? "#1E7B34" : "#8A5A00"} sub={onTime ? "met" : "missed"} />
       </div>
       {t.hours_first_complaint_to_done !== null ? (
         <p className="mt-2 text-[12.5px] text-[#454952]">First complaint to completion: <b className="text-[#16181D]">{t.hours_first_complaint_to_done} h</b> against a {slaHours} h target ({pct(t.hours_first_complaint_to_done / slaHours)} of the SLA).</p>

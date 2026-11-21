@@ -48,13 +48,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <span className="text-[17px] font-extrabold text-[#FF9B6A]">Lens</span>
               <span className="ml-2">Follow every rupee from a complaint to a fix that held</span>
             </div>
-            <div className="flex items-center gap-2 text-[12px]">
-              <span className="rounded-full bg-white/10 px-2.5 py-1">
+            <div className="flex w-full flex-wrap items-center gap-2 text-[12px] md:w-auto">
+              <span className="whitespace-nowrap rounded-full bg-white/10 px-2.5 py-1">
                 {health.data?.ai_available ? `AI: ${health.data.ai_engine}` : "AI offline: cached answers + templates"}
               </span>
-              <label className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 font-semibold text-[#16181D]">
+              <label className="flex min-h-9 w-full items-center gap-1.5 rounded-full bg-white px-3 py-1 font-semibold text-[#16181D] md:w-auto">
                 Ward
-                <select value={ward} onChange={(e) => setWard(e.target.value)} className="max-w-[210px] bg-transparent outline-none" aria-label="Ward">
+                <select value={ward} onChange={(e) => setWard(e.target.value)} className="min-w-0 flex-1 bg-transparent outline-none md:max-w-[210px]" aria-label="Ward">
                   {(wards.data?.rows ?? [{ ward_code: "L", ward_name: "Kurla" }]).map((r: any) => (
                     <option key={r.ward_code} value={r.ward_code}>
                       {r.ward_code} · {r.ward_name}
@@ -65,29 +65,36 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-end gap-x-7 gap-y-3">
-            <Stat label="Billed for 2025 monsoon road repairs" value={o ? inr(o.billed_inr) : "…"} />
-            <span className="pb-1 text-[26px] text-[#8A8F98]">→</span>
-            <Stat label="Needs a second look (3 rules, counted once)" value={o ? inr(o.review.total_at_risk_inr) : "…"} tone="#FF9B6A" />
-            <span className="pb-1 text-[26px] text-[#8A8F98]">→</span>
-            <Stat
-              label={w ? `Ward ${ward}: ${inr(w.total_review_inr)} to review, then reinvest by risk` : "Recover, then reinvest by risk"}
-              value="Next rupee plan"
-              tone="#7FD99A"
-            />
+            <Stat label="All wards · billed for 2025 monsoon road repairs" value={o ? inr(o.billed_inr) : "…"} />
+            <span aria-hidden className="hidden pb-1 text-[26px] text-[#8A8F98] md:inline">→</span>
+            <Stat label="All wards · needs a second look (3 rules, counted once)" value={o ? inr(o.review.total_at_risk_inr) : "…"} tone="#FF9B6A" />
+            <span aria-hidden className="hidden pb-1 text-[26px] text-[#8A8F98] md:inline">→</span>
+            <div>
+              <div className="text-[12px] text-[#C9CBD1]">
+                {w ? `Ward ${ward}: ${inr(w.total_review_inr)} to review, then reinvest by risk` : "Recover, then reinvest by risk"}
+              </div>
+              <Link
+                href="/next-rupee"
+                className="mt-1 inline-flex min-h-11 items-center rounded-xl bg-[#7FD99A] px-4 text-[18px] font-extrabold text-[#0F2A17] hover:bg-[#9BE5B0]"
+              >
+                See the next-rupee plan →
+              </Link>
+            </div>
           </div>
           <div className="mt-3 text-[11.5px] text-[#C9CBD1]">
             Synthetic organizer data · all contractors fictional · leads for review, not accusations
           </div>
         </div>
-        <nav className="mt-4 flex flex-wrap gap-1 border-b border-[#D5D6D0]">
+        <nav aria-label="Pages" className="mt-4 flex flex-nowrap gap-1 overflow-x-auto border-b border-[#D5D6D0] [scrollbar-width:none]">
           {NAV.map((n) => {
             const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
             return (
               <Link
                 key={n.href}
                 href={n.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-t-lg px-3.5 py-2 text-[13.5px] font-semibold",
+                  "flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-t-lg px-3.5 py-2 text-[13.5px] font-semibold",
                   active ? "border-b-[3px] border-[#1E4FD8] text-[#1E4FD8]" : "text-[#454952] hover:text-[#16181D]",
                 )}
               >
