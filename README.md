@@ -113,7 +113,7 @@ data/
   live/             (planned) Real BMC public records, context only, never joined to raw records
   synthetic/        (planned) NagarLens' own seeded extensions, each with a README
 docs/
-  TEAM_PLAN.md      Verified data facts, concept, roles, frozen interfaces, timeline
+  assets/           Banner and other images
 ```
 
 Every number in the UI is tagged with its data layer: **Synthetic (organizer)**, **Live BMC** or **Synthetic (NagarLens)**.

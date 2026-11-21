@@ -5,3 +5,7 @@ __pycache__/
 .idea/workspace.xml
 .idea/shelf/
 .pytest_cache/
+
+# Local-only reference docs (never commit)
+docs/TEAM_PLAN.md
+docs/FOLLOW_THE_RUPEE_HACKATHON_SPEC.md

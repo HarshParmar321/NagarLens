@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 NagarLens ("Follow the Rupee") is a one-day, 5-person hackathon build (Claude Impact Lab Mumbai, 21 Nov 2026): a Streamlit app that makes Mumbai BMC road-repair spending auditable — complaint → issue → work order → payment trail, evidence-backed audit leads, and a "next rupee" budget allocator.
 
-**`docs/TEAM_PLAN.md` is the working plan**: verified data facts, the concept, 5-person file ownership, frozen interfaces (function signatures, finding columns, `allocate()` output) and the timeline (feature freeze 3:30 pm, submit 4:15 pm). Field names in it are frozen; don't rename them without the team agreeing. `docs/FOLLOW_THE_RUPEE_HACKATHON_SPEC.md` is the earlier generic spec, written before the data was seen; where the two disagree, TEAM_PLAN wins.
+**The working plan lives in the team's shared "NagarLens Team Plan" doc** (ask the lead for the link). It holds the verified data facts, the concept, 5-person file ownership, frozen interfaces (function signatures, finding columns, `allocate()` output) and the timeline (feature freeze 3:30 pm, submit 4:15 pm). Field names are frozen; don't rename them without the team agreeing. The lead may keep local reference copies in `docs/` (`TEAM_PLAN.md`, the hackathon spec). Those are gitignored and must never be committed.
+
+Commits carry no `Co-Authored-By`, `Claude-Session` or other attribution trailers.
 
 ## The dataset (verified)
 
