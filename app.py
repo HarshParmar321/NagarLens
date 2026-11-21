@@ -22,7 +22,7 @@ st.set_page_config(page_title="NagarLens", page_icon="🔎", layout="wide")
 INK, BLUE, ORANGE, GREEN, GREY = "#16181D", "#1E4FD8", "#C2410C", "#1E7B34", "#8A8F98"
 
 st.markdown("""<style>
-.block-container{padding-top:1.2rem}
+.block-container{padding-top:4rem}
 .kpi,.step,.verdict,.flag{color:#16181D}
 .kpi{background:#FFFFFF;border:1px solid #D5D6D0;border-radius:14px;padding:14px 18px}
 .kpi .l{font-size:13px;color:#454952;font-weight:600}.kpi .v{font-size:28px;font-weight:700;color:#16181D}.kpi .s{font-size:12px;color:#454952}
@@ -208,8 +208,9 @@ with tabs[1]:
     for row in l2.itertuples():
         src_.append(ix[row.work_type]); dst.append(ix[row.outcome]); val.append(row.cost_inr)
     ncol = [INK] + [BLUE] * s.contractor.nunique() + [GREY] * s.work_type.nunique() + [GREEN, "#D99A00", ORANGE]
-    sk = go.Figure(go.Sankey(node=dict(label=nodes, color=ncol, pad=14), link=dict(source=src_, target=dst, value=val,
-                             hovertemplate="₹%{value:,.0f}<extra></extra>")))
+    sk = go.Figure(go.Sankey(node=dict(label=nodes, color=ncol, pad=14), textfont=dict(color=INK, size=13),
+                             link=dict(source=src_, target=dst, value=val, color="rgba(30,79,216,0.16)",
+                                       hovertemplate="₹%{value:,.0f}<extra></extra>")))
     sk.update_layout(height=460, margin=dict(l=0, r=0, t=10, b=10))
     st.plotly_chart(sk, width="stretch")
     a, b = st.columns(2)
@@ -219,6 +220,7 @@ with tabs[1]:
         m = px.choropleth_map(wm, geojson=t["wards_geo"], locations="ward_code", featureidkey="properties.ward_code",
                               color="billed_vs_budget", color_continuous_scale=["#E3E7EE", "#BCC8DC", "#F4B48E", "#C2410C"],
                               range_color=(0.7, 1.2), opacity=0.7, hover_name="ward_name", map_style="carto-positron",
+                              labels={"billed_vs_budget": "Billed ÷ budget"},
                               center={"lat": 19.07, "lon": 72.87}, zoom=9.6, height=460)
         fh = t["flood_hotspots"]
         m.add_scattermap(lat=fh.lat, lon=fh.lon, text=fh.name, mode="markers", name="Flood hotspots",
@@ -251,27 +253,33 @@ with tabs[2]:
         bar = st.progress(0.0, "Claude is triaging…")
         rows = []
         for i, it in enumerate(inbox.itertuples()):
-            tri = ai.triage(it.text, gazetteer)
+            tri = ai.triage(it.text, gazetteer, it.reported if isinstance(it.reported, str) else "")
             rows.append(dict(kind=it.kind, ref=it.ref, text=it.text, reported=it.reported, **tri))
             bar.progress((i + 1) / len(inbox), f"Triaged {i+1}/{len(inbox)}")
         bar.empty()
         res = pd.DataFrame(rows)
         res["category_changed"] = (res.kind == "complaint") & (res.reported != res.category) & (res.category != "Not a road issue")
         clean = res[~res.is_noise & (res.category != "Not a road issue")]
-        issues = clean.assign(locality=clean.locality.replace("", np.nan).fillna("unknown")).groupby(["locality", "category"]).size()
-        plan = allocate(road_risk(t, open_issues(t, ward), DEFAULT_WEIGHTS), 1_000_000)
+        placed = clean[(clean.locality != "") | (clean.road_name != "")]
+        issues = placed.assign(place=placed.locality.where(placed.locality != "", placed.road_name)).groupby(["place", "category"]).size()
         k = st.columns(5)
         kpi(k[0], "Items read", len(res), f"{(res.kind=='social post').sum()} social posts")
-        kpi(k[1], "Noise filtered", int(res.is_noise.sum() + (res.category == 'Not a road issue').sum()), "forwards, thanks, not roads")
+        kpi(k[1], "Noise filtered", len(res) - len(clean), "forwards, thanks, not roads")
         kpi(k[2], "Categories corrected", int(res.category_changed.sum()), "citizen picked wrong/vague")
         kpi(k[3], "Merged into issues", len(issues), "same place + problem")
-        kpi(k[4], "Triage engine", res.source.mode()[0], "claude / cache / rules")
-        fun = go.Figure(go.Funnel(y=["Received", "Real road issues", "Merged issues", "Matched to a road (ward)", "Funded in plan", "Sent to warranty contractor"],
-                                  x=[len(res), len(clean), len(issues), len(plan["selected"]) + len(plan["deferred"]) + len(plan["dlp_routed"]),
-                                     len(plan["selected"]), len(plan["dlp_routed"])], marker_color=[GREY, BLUE, BLUE, BLUE, GREEN, "#6D5BD0"]))
-        fun.update_layout(height=330, margin=dict(l=0, r=0, t=10, b=0))
-        st.plotly_chart(fun, width="stretch")
-        st.caption("The last three stages use the whole ward's open complaints from ⑥ Next rupee.")
+        kpi(k[4], "Triage engine", res.source.mode()[0], "claude / ollama / cache / rules")
+        a, b = st.columns([3, 2])
+        fun = go.Figure(go.Funnel(y=["Received", "Real road issues", "Place identified", "Merged issues"],
+                                  x=[len(res), len(clean), len(placed), len(issues)], marker_color=[GREY, BLUE, BLUE, GREEN],
+                                  textfont=dict(color="#FFFFFF", size=14)))
+        fun.update_layout(height=300, margin=dict(l=0, r=0, t=30, b=0), title="This batch")
+        a.plotly_chart(fun, width="stretch")
+        plan = allocate(road_risk(t, open_issues(t, ward), DEFAULT_WEIGHTS), 1_000_000)
+        with b:
+            st.markdown(f"**Whole ward {ward}: where the open issues end up** (₹10 L plan, ⑥ Next rupee)")
+            kpi(st, "Funded in plan", len(plan["selected"]), f"{inr(plan['total_inr'])} estimated")
+            kpi(st, "Sent to warranty contractor", len(plan["dlp_routed"]), "₹0 to BMC")
+            kpi(st, "Deferred or manual review", len(plan["deferred"]) + len(plan["excluded"]), "over budget / no road match")
         show = res[["kind", "ref", "text", "reported", "category", "locality", "road_name", "severity", "is_noise", "source"]]
         st.dataframe(show.style.apply(lambda c: ["background:#FFF6F1" if v else "" for v in res.category_changed], subset=["category"]),
                      width="stretch", hide_index=True, height=360)
@@ -325,15 +333,17 @@ with tabs[4]:
     sc["contractor"] = sc.contractor_name.str.replace(" (synthetic)", "")
     a, b = st.columns(2)
     with a:
-        bub = px.scatter(sc, x="reopened", y="over", size="jobs", color="on_time", text="contractor", height=440,
-                         color_continuous_scale="RdYlGn", labels={"reopened": "Fixes re-opened within 30 days",
-                         "over": "Share of bills over 1.4× rate card", "on_time": "On time"},
-                         title="Durability vs billing (bubble = jobs)")
-        bub.update_traces(textposition="top center"); bub.update_xaxes(tickformat=".0%"); bub.update_yaxes(tickformat=".0%")
+        bub = px.scatter(sc, x="reopened", y="over", size="jobs", color="contractor", height=440, size_max=28,
+                         hover_data={"on_time": ":.0%"}, labels={"reopened": "Fixes re-opened within 30 days",
+                         "over": "Share of bills over 1.4× rate card", "contractor": "Contractor"},
+                         title="Durability vs billing (bubble = jobs; top-right = review first)",
+                         color_discrete_sequence=px.colors.qualitative.Bold)
+        bub.update_xaxes(tickformat=".0%", range=[0, 0.45]); bub.update_yaxes(tickformat=".0%", range=[-0.01, 0.17])
         st.plotly_chart(bub, width="stretch")
     with b:
         hm = wo.assign(contractor=wo.contractor_name.str.replace(" (synthetic)", "")).pivot_table(
             index="contractor", columns="sla_hours", values="sla_met", aggfunc=lambda x: (x == "Y").mean())
+        hm.columns = [f"{c} h" for c in hm.columns]
         st.plotly_chart(px.imshow(hm, text_auto=".0%", color_continuous_scale="RdYlGn", aspect="auto", height=440,
                                   labels=dict(x="SLA tier (hours)", color="On time"),
                                   title="On time within each SLA tier: the fair comparison"), width="stretch")
@@ -370,14 +380,17 @@ with tabs[5]:
             kpi(k[2], "Sent to warranty", len(plan["dlp_routed"]), "₹0 to BMC")
             kpi(k[3], "Vs. complaint-count ranking", f"{plan['baseline_overlap']}/{len(plan['selected'])}", "same picks; rest are risk-driven")
             cmap = {"Funded": GREEN, "Deferred": "#D99A00", "Warranty: ₹0 to BMC": "#6D5BD0", "Excluded": GREY}
-            top = risk.head(15).assign(label=lambda d: d.road_name + " · " + d.category_reported)
-            st.plotly_chart(px.bar(top[::-1], x="risk_score", y="label", color="status", orientation="h", height=430,
+            top = risk.head(15).assign(label=lambda d: d.road_name + " · " + d.category_reported + " · " + d.locality_text)
+            st.plotly_chart(px.bar(top[::-1], x="risk_score", y="label", color="status", orientation="h", height=470,
                                    color_discrete_map=cmap, hover_data=["why", "method", "est_cost_inr"],
-                                   title="Top issues by risk score (0–100)"), width="stretch")
+                                   labels={"risk_score": "Risk score (0–100)", "label": ""},
+                                   title="Top 15 issues by risk score").update_xaxes(range=[0, 100]), width="stretch")
         a, b = st.columns([3, 2])
         with a:
-            mp = px.scatter_map(risk, lat="lat", lon="lon", color="status", size="risk_score", hover_name="road_name",
+            pts = risk.dropna(subset=["lat", "lon"])
+            mp = px.scatter_map(pts, lat="lat", lon="lon", color="status", size="risk_score", hover_name="road_name",
                                 hover_data=["category_reported", "why"], color_discrete_map=cmap, zoom=13, height=420,
+                                center={"lat": float(pts.lat.mean()), "lon": float(pts.lon.mean())}, size_max=22,
                                 map_style="carto-positron")
             mp.update_layout(margin=dict(l=0, r=0, t=0, b=0), legend=dict(orientation="h", y=0))
             st.plotly_chart(mp, width="stretch")

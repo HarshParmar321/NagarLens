@@ -102,20 +102,25 @@ TRIAGE_SYSTEM = ("You triage Mumbai civic road complaints written in English, Hi
                  "Severity: 5 = open manhole or cave-in or danger to life, 4 = deep waterlogging, "
                  "3 = pothole on a busy road, 2 = minor, 1 = cosmetic. Mark forwards, thank-yous and jokes as noise.")
 
-KEYWORDS = [("Road cave-in", ["cave", "dhas", "sinkhole", "dhans"]), ("Open or broken manhole", ["manhole", "chamber", "gutter ka dhakkan"]),
-            ("Waterlogging", ["water", "paani", "pani", "flood", "logging", "bharl", "bhar gaya"]),
-            ("Choked drain / nullah overflow", ["drain", "nullah", "nala", "gutter"]),
-            ("Broken paver blocks", ["paver", "block"]), ("Pothole", ["pothole", "khadda", "khada", "gaddha", "खड्डा", "गड्ढा"])]
+# Most specific problems first, so "paver blocks ... water collecting" stays a paver issue.
+KEYWORDS = [("Road cave-in", ["cave", "crater", "sinkhole", "dhas", "dhans", "खचला", "धंसी", "धंस"]),
+            ("Open or broken manhole", ["manhole", "chamber", "dhakkan", "मैनहोल", "मॅनहोल", "ढक्कन", "झाकण"]),
+            ("Broken paver blocks", ["paver", "pavement block", "पेव्हर", "पेवर"]),
+            ("Choked drain / nullah overflow", ["drain", "nullah", "nala", "gutter", "नाला", "गटार", "नाली"]),
+            ("Pothole", ["pothole", "khadda", "khada", "gaddha", "खड्डा", "खड्डे", "गड्ढा", "गड्ढे"]),
+            ("Waterlogging", ["waterlog", "water logged", "flood", "paani", "pani", "knee", "पाणी", "पानी", "bhar gaya", "bharl"])]
 SEV = {"Road cave-in": 5, "Open or broken manhole": 5, "Waterlogging": 4, "Pothole": 3,
        "Choked drain / nullah overflow": 3, "Broken paver blocks": 2, "Not a road issue": 1}
 
 
-def triage(text: str, gazetteer: list[str]) -> dict:
+def triage(text: str, gazetteer: list[str], reported: str = "") -> dict:
     out, src = _call("triage", text, TRIAGE_SYSTEM, f"Complaint:\n{text}", TRIAGE_SCHEMA, 800)
     if out:
         return {**out, "source": src}
     low = text.lower()
-    cat = next((c for c, kws in KEYWORDS if any(k in low for k in kws)), "Not a road issue")
+    # Rules only override the citizen's category when a keyword clearly says otherwise.
+    fallback = reported if reported in SEV else ("Pothole" if reported in ("Road related",) else "Not a road issue")
+    cat = next((c for c, kws in KEYWORDS if any(k in low for k in kws)), fallback)
     loc = next((g for g in gazetteer if g and g.lower() in low), "")
     road = (re.search(r"\b(?:on|at)\s+([A-Z][\w .]+?(?:Road|Marg|Highway|Rd))", text) or [None, ""])[1]
     noise = bool(re.search(r"\b(fwd|forwarded|thank|thanks|dhanyavad)\b", low))
@@ -139,7 +144,7 @@ def explain_case(case: dict) -> tuple[str, str]:
     flags = "; ".join(f["reason"] for f in case["findings"]) or "No audit rule was triggered."
     action = case["findings"][0]["review_action"] if case["findings"] else "No action needed beyond routine monitoring."
     return (f"{case['n_complaints']} citizen complaint(s) led to work order {w['work_order_id']} on {w['road_name']}. "
-            f"{w['contractor_name']} did a {w['repair_method'].lower()} for ₹{w['cost_inr']:,} "
+            f"{w['contractor_name']} carried out the repair ({w['repair_method']}) for ₹{w['cost_inr']:,} "
             f"(rate card ₹{w['expected_cost_inr']:,.0f}); the SLA was {'met' if w['sla_met'] == 'Y' else 'missed'} and the fix {held}. "
             f"Audit: {flags} Next step: {action}"), "template"
 
