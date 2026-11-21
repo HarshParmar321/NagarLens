@@ -4,6 +4,7 @@ Run:  .venv/Scripts/python -m streamlit run app.py
 Data: organizer's synthetic dataset (data/raw/data). Set ANTHROPIC_API_KEY for live Claude; otherwise the
 AI steps use cached answers or deterministic fallbacks.
 """
+import html
 import re
 
 import numpy as np
@@ -49,6 +50,11 @@ gazetteer = list(t["localities"].locality) + [a.strip() for s in t["localities"]
 def kpi(col, label, value, sub=""):
     col.markdown(f'<div class="kpi"><div class="l">{label}</div><div class="v">{value}</div><div class="s">{sub}</div></div>',
                  unsafe_allow_html=True)
+
+
+def esc(s) -> str:
+    """Escape model output and dataset text before it goes into HTML-styled cards."""
+    return html.escape(str(s)).replace("\n", "<br>")
 
 
 def inr(x):
@@ -102,7 +108,7 @@ with tabs[0]:
         ("6 · Verdict", f"{len(f_here)} review lead(s)" if len(f_here) else "No flags", ", ".join(RULE_LABEL[x] for x in f_here.rule_id) or "within normal range", "bad" if len(f_here) else "ok"),
     ]
     st.markdown('<div class="steps">' + "".join(
-        f'<div class="step {cls}"><div class="n">{n}</div><div class="t">{tt}</div><div class="d">{d}</div></div>'
+        f'<div class="step {cls}"><div class="n">{n}</div><div class="t">{esc(tt)}</div><div class="d">{esc(d)}</div></div>'
         for n, tt, d, cls in steps) + "</div>", unsafe_allow_html=True)
 
     a, b = st.columns(2)
@@ -163,10 +169,10 @@ with tabs[0]:
             "findings": f_here.to_dict("records"), "repeat_jobs_within_30d": later.work_order_id.tolist()}
     text, src = ai.explain_case(case)
     st.markdown(f'<div class="verdict"><span class="badge">{"Written by Claude" if src in ("claude", "cache") else "Template (Claude offline)"}</span>'
-                f'<p style="margin:8px 0 0;font-size:15px;line-height:1.55">{text}</p></div>', unsafe_allow_html=True)
+                f'<p style="margin:8px 0 0;font-size:15px;line-height:1.55">{esc(text)}</p></div>', unsafe_allow_html=True)
     for fr in f_here.itertuples():
         st.markdown(f'<div class="flag"><b>{RULE_LABEL[fr.rule_id]}</b> · needs review · at risk <b>{inr(fr.amount_at_risk_inr)}</b><br>'
-                    f'{fr.reason}<br><i>Fair context:</i> {fr.fair_context}<br><b>Next:</b> {fr.review_action}</div>', unsafe_allow_html=True)
+                    f'{esc(fr.reason)}<br><i>Fair context:</i> {esc(fr.fair_context)}<br><b>Next:</b> {esc(fr.review_action)}</div>', unsafe_allow_html=True)
     md = f"# Case file {wid}\n\n" + text + "\n\n## Complaints\n" + "\n".join(f"- {c.complaint_id} ({c.channel}): {c.description}" for c in cc.itertuples()) \
          + "\n\n## Audit leads\n" + ("\n".join(f"- {x.rule_id}: {x.reason} Next: {x.review_action}" for x in f_here.itertuples()) or "- none")
     st.download_button("⬇ Download case file", md, f"case_{wid}.md")
@@ -406,7 +412,7 @@ with tabs[6]:
                                               "sla_hours", "sla_met", "completed_at", "reopened_within_30d", "road_name"]].to_dict() if len(w_) else None}
             ans, src = ai.answer_citizen(q, recs)
             st.markdown(f'<div class="verdict"><span class="badge">{"Claude" if src in ("claude","cache") else "Template (Claude offline)"}</span>'
-                        f'<p style="font-size:17px;line-height:1.7;margin:8px 0 0">{ans}</p></div>', unsafe_allow_html=True)
+                        f'<p style="font-size:17px;line-height:1.7;margin:8px 0 0">{esc(ans)}</p></div>', unsafe_allow_html=True)
             if len(w_):
                 x = w_.iloc[0]
                 k = st.columns(4)
