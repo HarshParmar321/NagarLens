@@ -25,19 +25,15 @@ Merge smallest and most independent first. After each merge: `pytest`, `npm run 
 Conflicts will be in `backend/main.py` (router tuple), `frontend/components/shell.tsx` (`NAV`) and `frontend/app/audit/page.tsx` (two teammates mount a component there). Resolve by keeping both lines.
 Reject or defer anything that breaks a rule in `AGENTS.md`. A feature missing from the video is better than a wrong number in it.
 
-## 3. Demo video (2 minutes, record 14:15 to 14:30)
-Setup: both servers running, ward L selected, browser at 1440 px wide, cache warm, notifications off.
+## 3. Demo video (record 14:15 to 14:30, review to 14:45)
+The plan, shot list and word-for-word voiceover are in `demo/DEMO_SCRIPT.md`. That file is the only script; do not keep a second copy here.
 
-| Time | Screen | Say |
-|---|---|---|
-| 0:00 to 0:15 | Hero band on `/` | "Mumbai billed 13.43 crore rupees for monsoon road repairs. 3.22 crore of it needs a second look. This is NagarLens. The data is synthetic." |
-| 0:15 to 0:35 | `/`: ward map, click ward L, money flow | "Pick a ward. Kurla billed 110% of its budget. Follow the rupee: what it was spent on, and whether the fix held." |
-| 0:35 to 1:00 | `/audit`: a duplicate lead (`AUD-0112`), two bills side by side, then officer decision | "Three precise rules. Here are two bills for the same road, same contractor, same area, three days apart, and only one has a complaint behind it. It is a lead, not an accusation. The officer holds it for evidence." |
-| 1:00 to 1:20 | `/scorecards`: one contractor card, the system-problem banner | "Scorecards compare like with like. 24-hour deadlines are missed by everyone, so that is a system problem, not a contractor problem. Durability is where contractors really differ." |
-| 1:20 to 1:45 | `/next-rupee`: plan, move one weight slider, strategy comparison if merged | "Recover first, then reinvest. The plan ranks open issues by risk: hospitals, bus routes, flood hotspots. It never exceeds the budget, and warranty roads go back to the original contractor at zero cost." |
-| 1:45 to 2:00 | `/ask`: Marathi question | Type "माझी तक्रार BMC25-001690 चं काय झालं?" "A citizen asks in Marathi and gets the answer in Marathi, from the linked records." Close on the hero. |
+Before recording, and again after each merge:
+1. `.venv/Scripts/python demo/check_demo.py` checks every number in the voiceover against the app. It must end with `ALL CLAIMS MATCH THE APP`.
+2. `.venv/Scripts/python demo/walkthrough.py --fast` proves every click in the shot list works.
+3. `.venv/Scripts/python demo/walkthrough.py` records a silent backup take to `demo/out/walkthrough.webm`.
 
-Record one full take with screen capture and voice. If a page fails, cut that segment; do not narrate over an error.
+If a merged PR makes either check fail, fix it or revert the PR before recording.
 
 ## 4. Fallback
 If the new stack breaks close to recording: `.venv/Scripts/python -m streamlit run app.py`. It covers the same six steps in tabs. Record from it and say nothing about the stack.
