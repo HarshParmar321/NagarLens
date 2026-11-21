@@ -58,6 +58,17 @@ export default function OverviewPage() {
                 <Tooltip formatter={(v: any) => inr(Number(v))} />
               </Sankey>
             </ResponsiveContainer>
+            <div aria-label="Legend" className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-[#2A2D33]">
+              {[["source", "Billed in this ward"], ["work_type", "What it was spent on (work type)"], ["held", "Held 30 days, no flag"],
+                ["failed", "Failed within 30 days"], ["review", "Needs review (one audit rule per job)"]].map(([k, label]) => (
+                <span key={k} className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm" style={{ background: KIND_COLOR[k] }} />{label}
+                </span>
+              ))}
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-6 rounded-sm" style={{ background: "#1E4FD8", opacity: 0.25 }} />Band width = rupees billed
+              </span>
+            </div>
           </Section>
         </div>
         <div className="lg:col-span-2">
@@ -77,8 +88,8 @@ export default function OverviewPage() {
               <YAxis yAxisId="inr" orientation="right" fontSize={11} tickFormatter={(v) => inr(v)} />
               <Tooltip formatter={(v: any, n: any) => (n === "Billed" ? inr(Number(v)) : `${Number(v).toFixed(0)} mm`)} />
               <Legend />
-              <Bar yAxisId="rain" dataKey="rainfall_mm" name="Rainfall" fill="#9DB4EE" />
-              <Line yAxisId="inr" dataKey="billed_inr" name="Billed" stroke="#C2410C" strokeWidth={2} dot={false} />
+              <Bar yAxisId="rain" dataKey="rainfall_mm" name="Rainfall, mm (left axis)" fill="#9DB4EE" />
+              <Line yAxisId="inr" dataKey="billed_inr" name="Billed, ₹ (right axis)" stroke="#C2410C" strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </Section>

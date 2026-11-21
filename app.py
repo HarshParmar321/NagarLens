@@ -207,7 +207,7 @@ with tabs[0]:
                         text="this", color_discrete_map={"Held": GREEN, "Re-opened within 30 days": ORANGE})
         hf.update_traces(textposition="top center")
         hf.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), xaxis_title=None, yaxis_title=None,
-                         legend=dict(orientation="h", y=-0.2))
+                         legend=dict(orientation="h", y=-0.2, title="Outcome (bubble size = ₹ billed):"))
         st.plotly_chart(hf, width="stretch")
         st.caption(f"{len(hist)} jobs on {road.road_name} ({r.road_id}), {inr(hist.cost_inr.sum())} billed in total.")
 
@@ -258,6 +258,10 @@ with tabs[1]:
                              link=dict(source=src_, target=dst, value=val, color=lcol, hovertemplate="₹%{value:,.0f}<extra></extra>")))
     sk.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=10))
     st.plotly_chart(sk, width="stretch")
+    st.markdown("".join(f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-size:13px;color:#2A2D33">'
+                        f'<span style="width:12px;height:12px;border-radius:2px;background:{c};display:inline-block"></span>{esc(l)}</span>'
+                        for l, c in [("Budget", INK), ("Billed", BLUE), ("Unspent", GREY)] + list(OUT_COL.items()))
+                + '<span style="font-size:13px;color:#454952">· band width = rupees</span>', unsafe_allow_html=True)
     if billed > budget:
         st.caption(f"Billed exceeds the ward budget by {inr(billed - budget)}.")
     a, b = st.columns(2)
@@ -270,9 +274,10 @@ with tabs[1]:
                               labels={"billed_vs_budget": "Billed ÷ budget"},
                               center={"lat": 19.07, "lon": 72.87}, zoom=9.6, height=460)
         fh = t["flood_hotspots"]
-        m.add_scattermap(lat=fh.lat, lon=fh.lon, text=fh.name, mode="markers", name="Flood hotspots",
-                         marker=dict(size=fh.years_flagged_last_5 * 3 + 6, color=BLUE, opacity=.6))
-        m.update_layout(margin=dict(l=0, r=0, t=30, b=0), title="Billed vs budget by ward, with flood hotspots")
+        m.add_scattermap(lat=fh.lat, lon=fh.lon, text=fh.name, mode="markers", name="Flood hotspot (size = years flagged, last 5)",
+                         marker=dict(size=fh.years_flagged_last_5 * 3 + 6, color=BLUE, opacity=.6), showlegend=True)
+        m.update_layout(margin=dict(l=0, r=0, t=30, b=0), title="Billed vs budget by ward, with flood hotspots",
+                        legend=dict(orientation="h", y=-0.02, x=0))
         st.plotly_chart(m, width="stretch")
     with b:
         rain = t["rainfall_daily"].groupby("date").rainfall_mm.max()
@@ -398,8 +403,11 @@ with tabs[4]:
                             line=dict(color="#C9CCD2", width=3), showlegend=False, hoverinfo="skip")
         fig.add_scatter(x=d.expected_reopen_rate, y=d[name_col], mode="markers", name="Expected for the same methods",
                         marker=dict(size=11, color="#FFFFFF", line=dict(color=INK, width=2)))
-        fig.add_scatter(x=d.reopen_rate, y=d[name_col], mode="markers", name="Actual",
+        fig.add_scatter(x=d.reopen_rate, y=d[name_col], mode="markers", name="Actual", showlegend=False,
                         marker=dict(size=13, color=[CHIP[c] for c in d.durability_chip]))
+        for lab, col in [("Actual: better than peers", CHIP["better than peers"]), ("Actual: in line", CHIP["in line with peers"]),
+                         ("Actual: below peers", CHIP["below peers"])]:
+            fig.add_scatter(x=[None], y=[None], mode="markers", name=lab, marker=dict(size=13, color=col))
         fig.update_layout(height=max(320, 26 * len(d) + 120), margin=dict(l=0, r=0, t=40, b=0),
                           title="Fixes re-opened within 30 days: actual vs expected", legend=dict(orientation="h", y=-0.12))
         fig.update_xaxes(tickformat=".0%", title=None)
@@ -488,7 +496,7 @@ with tabs[5]:
                                 hover_data={"category_reported": True, "why": True, "lat": False, "lon": False},
                                 color_discrete_map=cmap, zoom=13, height=520, size_max=22, map_style="carto-positron",
                                 center={"lat": float(pts.lat.mean()), "lon": float(pts.lon.mean())})
-            mp.update_layout(margin=dict(l=0, r=0, t=0, b=0), legend=dict(orientation="h", y=0, title=None))
+            mp.update_layout(margin=dict(l=0, r=0, t=0, b=0), legend=dict(orientation="h", y=0, title="Status (bubble size = risk score):"))
             st.plotly_chart(mp, width="stretch")
         with st.expander(f"Deferred, warranty-routed and excluded: {len(plan['deferred']) + len(plan['dlp_routed']) + len(exc_c)} items, with reasons"):
             for name in ["deferred", "dlp_routed"]:

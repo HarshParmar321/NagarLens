@@ -70,6 +70,15 @@ export default function ScorecardsPage() {
               ))}
             </tbody>
           </table>
+          <div aria-label="Legend" className="mt-3 flex items-center justify-end gap-2 text-[12.5px] text-[#2A2D33]">
+            <span>Share finished inside the SLA:</span>
+            {[0, 0.25, 0.5, 0.75, 1].map((v) => (
+              <span key={v} className="flex flex-col items-center">
+                <span className="inline-block h-3 w-9 rounded-sm" style={{ background: `rgba(30,79,216,${0.06 + 0.84 * v})` }} />
+                <span className="text-[11px] text-[#454952]">{Math.round(v * 100)}%</span>
+              </span>
+            ))}
+          </div>
         </Section>
       ) : null}
 
