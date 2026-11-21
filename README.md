@@ -44,18 +44,16 @@ Our pitch is **"Recover, then reinvest."** About ₹3 Cr went on repairs to road
 
 ## What it does
 
-A single Streamlit app with a ward picker in the sidebar:
+A Next.js web app on a FastAPI backend, with a ward picker on every page. Six pages, one for each question in the brief:
 
-| Tab | What you see |
-|---|---|
-| **① Follow a case** | One work order end to end: complaints → assignment → repair → bill vs rate card → did it hold? → verdict, with a map, SLA timeline and a downloadable case file |
-| **② Ward overview** | Budget vs billed, money spent on fixes that failed, a contractor → method → outcome Sankey, a citywide ward choropleth with flood hotspots, and rainfall vs spend |
-| **③ AI inbox** | Messy open complaints and social posts go through Claude triage and come out as merged, road-matched, risk-scored actions |
-| **④ Recovery ledger** | The headline total, money at risk by rule and contractor, the cost-ratio distribution, a CSV export and a Claude-written ward officer brief |
-| **⑤ Scorecards** | Durability vs billing per contractor, plus on-time rates *within each SLA tier* (the fair comparison) |
-| **⑥ Next rupee** | Recover first, then a budget-capped plan: risk-ranked issues, adjustable risk-weight sliders, a map, and deferred, warranty-routed and excluded items with reasons |
-| **⑦ Ask NagarLens** | "What happened to my complaint?" answered in the citizen's own language from the linked records |
-| **Data quality** | How complete each link in the trail is, and whether each one is an exact or a candidate match |
+| Page | Route | What you see |
+|---|---|---|
+| **Where did the money go?** | `/` | The headline (₹13.43 Cr billed → ₹3.22 Cr to review), budget vs billed by ward, a budget → billed → outcome money flow, a ward map with flood hotspots, and rainfall vs spend |
+| **Follow one case** | `/case` | One work order end to end: complaints → assignment → repair → bill vs rate card → did it hold? → verdict, with a map, the SLA clock, the road's repair history and a Claude-written verdict |
+| **What doesn't add up?** | `/audit` | Review leads from three rules (paid during warranty, above the rate card, possible duplicate bill), each with its evidence, fair context and next step, plus a reviewer decision saved to SQLite |
+| **Who is responsible?** | `/scorecards` | Contractor and ward report cards compared like for like (same SLA tier and flood exposure, same repair method), with Speed / Durability / Cost chips and a plain-language summary |
+| **Where should the next rupee go?** | `/next-rupee` | Recover first, then a budget- and crew-capped plan: open complaints matched to road segments, risk-ranked with the reasons shown, adjustable weights, a map, and every deferred, warranty-routed or excluded item with its reason |
+| **Ask about my complaint** | `/ask` | "What happened to my complaint?" answered in the citizen's own language (English, Hindi, Marathi or Hinglish) from the linked records, including open, merged and forwarded complaints |
 
 ### The AI workflow
 
@@ -78,43 +76,56 @@ Claude also writes **case verdicts** in plain language, the **ward officer brief
 
 ---
 
+> **Teammates and coding agents: start with [TASKS.md](TASKS.md).** It has the ground rules, the API map and one task file per person in `docs/tasks/`.
+
 ## Quick start
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.12.
+Requires [uv](https://docs.astral.sh/uv/), Python 3.12 and Node.js 20+. Run both commands from the repo root.
 
 ```bash
+# 1. API (FastAPI) on http://localhost:8000  ·  docs at /docs
 uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
-.venv/Scripts/python -m streamlit run app.py      # Windows
-# .venv/bin/python -m streamlit run app.py        # macOS / Linux
+.venv/Scripts/python -m uvicorn backend.main:app --reload --port 8000     # macOS/Linux: .venv/bin/python
+
+# 2. Web app (Next.js) on http://localhost:3000
+cd frontend && npm install && npm run dev
 ```
 
-**Optional, for live Claude:** set `ANTHROPIC_API_KEY` in the environment before launching. Without it the sidebar shows "offline", and the AI steps use cached answers or the deterministic templates. Never commit a key.
+**Live Claude (optional):** copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY`. Without it, every AI step uses cached answers (`data/cache/ai_cache.json`, committed) or deterministic templates, so the demo also runs offline. Never commit `.env`.
 
-On Windows, set `PYTHONIOENCODING=utf-8` if you print Devanagari complaint text to the console.
+**Fallback demo:** the original Streamlit app still runs on the same modules: `.venv/Scripts/python -m streamlit run app.py`.
+
+**Tests:** `.venv/Scripts/python -m pytest`
 
 ---
 
 ## Architecture
 
-Single-process Streamlit app. No API server, database or queue.
-
 ```
-app.py              Streamlit UI: the 7 tabs + Data quality; scorecards are computed here
-src/
-  data.py           load_all(): load CSVs, parse dates, derived columns
-                    (expected_cost_inr, cost_ratio, under_dlp, hours_to_complete, ...)
+frontend/           Next.js + TypeScript, Tailwind + shadcn/ui, Recharts, react-leaflet, TanStack Query
+backend/            FastAPI: a thin JSON layer over src/ (no number is computed differently here)
+  main.py           app, CORS for localhost:3000, routers under /api
+  deps.py           dataset, audit and scorecards loaded once; JSON helpers
+  db.py             SQLite (SQLModel): reviewer decisions on audit leads
+  routers/          overview, wards, audit, scorecards, cases, plan (Next Rupee), ai (Claude endpoints)
+src/                Deterministic core, shared by the API and the Streamlit fallback
+  data.py           load_all(): CSVs, parsed dates, derived columns (expected_cost_inr, cost_ratio, ...)
   audit.py          run_audit() -> review leads; recovery_summary() -> de-duplicated ₹ by rule
-  budget.py         open_issues(), road_risk(), allocate() (never exceeds the budget)
-  ai.py             Claude layer: triage, explain_case, answer_citizen, officer_brief
-                    (disk cache + template fallback)
+  scorecard.py      like-for-like contractor and ward scorecards + plain-language text
+  budget.py         open complaints -> road segments -> risk score -> allocate() (never exceeds the budget)
+  ai.py             Claude layer: triage, case verdict, citizen answer, officer brief, scorecard text
+                    (disk cache + template fallback; Claude never changes a number)
+app.py              Streamlit fallback demo
+tests/              pytest: audit counts, the ₹3.22 Cr headline, scorecards, budget-cap invariants
 data/
   raw/              Organizer dataset (synthetic). Scoring core: all flags and rankings come from it
-  cache/            Cached Claude responses
+  cache/            Cached AI responses (committed, so the demo runs offline)
   live/             (planned) Real BMC public records, context only, never joined to raw records
   synthetic/        (planned) NagarLens' own seeded extensions, each with a README
-docs/
-  assets/           Banner and other images
+docs/assets/        Banner and hero images
 ```
+
+API conventions: JSON with snake_case keys matching the DataFrame columns; rupee amounts are integers with the type in the key (`billed_inr`, `budget_inr`, `est_cost_inr`, `amount_at_risk_inr`); timestamps are ISO strings; ward codes containing "/" (e.g. `F/N`) are path segments (`/api/wards/F/N/plan`); every response with rupees carries `"data_layer"`.
 
 Every number in the UI is tagged with its data layer: **Synthetic (organizer)**, **Live BMC** or **Synthetic (NagarLens)**.
 
@@ -122,13 +133,15 @@ Every number in the UI is tagged with its data layer: **Synthetic (organizer)**,
 
 ## Team 11
 
-| # | Role | Owns | Builds | Name |
-|---|---|---|---|---|
-| 1 | Tech lead / Claude | `app.py`, `src/ai.py`, `src/data.py` scaffold | Repo skeleton, Claude layer (parser, explanations, scorecard text, ward one-pager, citizen Q&A) with cache and fallbacks, integration | TBD |
-| 2 | Trail engineer | `src/data.py`, `src/trail.py` | Derived columns, complaint → work order → road trail, dedupe and road-match open complaints, coverage stats | TBD |
-| 3 | Audit engineer | `src/audit.py`, `src/scorecard.py` | Three flag rules plus two informational ones, recovery summary, like-for-like scorecards, precision checks | TBD |
-| 4 | Budget engineer | `src/budget.py` | Road risk score, cost estimates, method choice by lifetime cost, budget-capped allocation, DLP routing, adjustable weights | TBD |
-| 5 | UI / story lead | UI pages, `demo/`, README | Streamlit pages, maps, pitch slide, demo script, backup recording | TBD |
+| Member | Builds |
+|---|---|
+| **Kshitij** (lead) | The base (API + web app), merging teammates' PRs, demo video |
+| **Harsh** | Three-way verdict, fair hearing, public repair receipt |
+| **Shariyan** | Rain/flood-adjusted grades, evidence-request letter |
+| **Aditya** | Strategy comparison: the same budget spent three ways |
+| **Deven** | Road history page |
+
+Per-person task files live in [`docs/tasks/`](docs/tasks/); start with [TASKS.md](TASKS.md).
 
 ---
 

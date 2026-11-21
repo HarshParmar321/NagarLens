@@ -9,6 +9,12 @@ import os
 import re
 from pathlib import Path
 
+try:  # load ANTHROPIC_API_KEY etc. from the repo's .env (gitignored)
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "ai_cache.json"
 MODEL = "claude-opus-5-5"
 CATEGORIES = ["Pothole", "Waterlogging", "Open or broken manhole", "Choked drain / nullah overflow",

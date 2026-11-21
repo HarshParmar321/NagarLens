@@ -9,3 +9,9 @@ __pycache__/
 # Local-only reference docs (never commit)
 docs/TEAM_PLAN.md
 docs/FOLLOW_THE_RUPEE_HACKATHON_SPEC.md
+
+# Frontend and API
+node_modules/
+.next/
+frontend/.env*.local
+*.db

@@ -10,6 +10,8 @@ NagarLens ("Follow the Rupee") is a one-day, 5-person hackathon build (Claude Im
 
 Commits carry no `Co-Authored-By`, `Claude-Session` or other attribution trailers.
 
+**Teammates: start with `TASKS.md`.** It has the ground rules, the API map and your own task file in `docs/tasks/<name>.md`. Read it before writing code.
+
 ## The dataset (verified)
 
 - Organizer repo cloned to `data/raw/` (commit `81d2280`); CSVs are in `data/raw/data/`, columns are in `data/raw/DATA_DICTIONARY.md`. **Everything is synthetic**, including the fictional contractors. Judges score audit flags and next-rupee rankings against a hidden answer key, so precision on planted anomalies matters most.
@@ -36,29 +38,24 @@ Every UI number carries a badge for its layer: Synthetic (organizer), Live BMC, 
 - Audit findings are "needs review" leads with baseline, evidence refs, alternative explanations, limitations and a review action — never fraud/blame language.
 - Budget allocation must never exceed the user's budget; don't invent repair costs (use source costs or explicitly user-entered/labeled assumptions); show excluded items and why.
 
-## Architecture (planned, spec §7, §13–14)
+## Architecture
 
-Single-process Streamlit app; no REST API, DB server, queues or microservices.
+Stack (final, agreed by the team): **Next.js + TypeScript frontend** (`frontend/`, Tailwind + shadcn/ui, Recharts, react-leaflet, TanStack Query, localhost:3000) and a **FastAPI backend** (`backend/`, localhost:8000) that is a thin JSON wrapper over the deterministic core in `src/`. `app.py` (Streamlit) is kept runnable as a fallback demo; no new Streamlit UI work.
 
-```
-data/raw → src/ingest.py (profile_sources, normalize_sources)
-         → src/joins.py  (build_trail → trail edges + coverage)
-         → src/audit.py  (run_audit)        → src/budget.py (allocate_budget)
-         → src/ai.py     (explain_findings — Claude)
-         → app.py / src/ui.py (tabs: Overview, Money Trail, Audit Leads, Next Rupee, optional Data Quality)
-```
-
-- All numbers, join classes, finding status and budget math are deterministic pandas/Python. Claude (`src/ai.py`) only does extraction from genuinely unstructured inputs and explanations; its output is Pydantic/JSON-schema validated, cached, and must never overwrite computed values. Every Claude call needs a deterministic templated fallback — the app must run offline from cached normalized data.
-- Map (Folium/Plotly) only if real coordinates/geometry exist.
-- File ownership is split across 5 teammates (spec §12) — avoid editing another workstream's files without coordination; keep function interfaces from spec §14 stable.
+- All numbers, join classes, finding status and budget math are deterministic pandas in `src/`. The API never recomputes a figure differently. Claude (`src/ai.py`) only reads messy text and writes explanations. It never overwrites a computed value, every call is cached in `data/cache/ai_cache.json`, and every call has a template fallback, so the app runs offline.
+- Anthropic SDK calls happen only in the backend (`src/ai.py`), never in the frontend. The key comes from `.env`.
+- API conventions: snake_case keys matching the DataFrame columns; rupees are integers with the type in the key name (`*_inr`); timestamps are ISO strings; NaN becomes null; every rupee response carries `"data_layer"`. Ward codes contain "/": declare routes with `{ward:path}`. Don't add a bare `/wards/{ward:path}` route that would swallow `/plan` or `/brief`.
+- File ownership: `backend/routers/plan.py`, `backend/routers/ai.py`, `src/budget.py`, `src/ai.py` and `src/data.py` belong to the lead's session. The other routers, `backend/deps.py`, `backend/db.py` and `frontend/` belong to the teammate session. `src/audit.py`, `src/scorecard.py` and `tests/` belong to the audit owner. Coordinate before editing someone else's file. Teammates add features by PR.
 
 ## Commands
 
-Use the Python 3.12 venv at `.venv` (created with uv). System Python 3.14 has no packages. Once the scaffolding exists (`requirements.txt`, `app.py`, `tests/`):
+Use the Python 3.12 venv at `.venv` (created with uv). System Python 3.14 has no packages. 
 
 ```
 uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
-.venv/Scripts/python -m streamlit run app.py
+.venv/Scripts/python -m uvicorn backend.main:app --reload --port 8000   # API (from the repo root)
+cd frontend && npm install && npm run dev                               # web app on :3000
+.venv/Scripts/python -m streamlit run app.py                            # fallback demo
 .venv/Scripts/python -m pytest                                  # all tests
 .venv/Scripts/python -m pytest tests/test_audit.py::test_name   # single test
 ```
